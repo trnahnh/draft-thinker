@@ -73,7 +73,7 @@ These are targets, not claims. Actual numbers will be filled in after calibratio
 # Prerequisites: Go 1.22+, Docker, API keys for Groq + OpenAI/Anthropic
 
 # Clone and build
-git clone https://github.com/yourusername/draft-thinker.git
+git clone https://github.com/trnahnh/draft-thinker.git
 cd draft-thinker
 go build -o draft-thinker ./cmd/gateway
 
