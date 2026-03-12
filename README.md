@@ -100,7 +100,7 @@ curl http://localhost:8080/v1/chat/completions \
 
 This is a portfolio project targeting Fall 2026 co-op applications at quantitative finance and top tech firms. It demonstrates distributed systems design, production engineering judgment, and the ability to build infrastructure that saves real money — with every claim backed by measured data.
 
-It pairs with [Ferrox](https://github.com/yourusername/ferrox), a low-latency order matching engine in Rust (500ns P99, 4.7M orders/sec). Together they cover both ends of the systems spectrum: Ferrox is CPU-bound mechanical sympathy; Draft-Thinker is network-bound distributed systems.
+It pairs with [Ferrox](https://github.com/trnahnh/ferrox), a low-latency order matching engine in Rust (500ns P99, 4.7M orders/sec). Together they cover both ends of the systems spectrum: Ferrox is CPU-bound mechanical sympathy; Draft-Thinker is network-bound distributed systems.
 
 ## Contact
 
