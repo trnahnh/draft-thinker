@@ -49,8 +49,8 @@ No Python in the hot path. The draft-verify state machine is a Go switch stateme
 
 ## Current State
 
-- **Phase 1 — Foundation**: Proxy with Groq integration (**status:** Not started).
-- **Phase 2 — Entropy engine**: Logprob analysis and routing (**status:** Not started).
+- **Phase 1 — Foundation**: Proxy with Groq integration (**status:** Complete).
+- **Phase 2 — Entropy engine**: Logprob analysis and routing (**status:** In progress).
 - **Phase 3 — Calibration**: Threshold sweep and benchmark dataset (**status:** Not started).
 - **Phase 4 — Speculative execution**: Parallel heavyweight calls (**status:** Not started).
 - **Phase 5 — Semantic cache**: Qdrant + embedding pipeline (**status:** Not started).

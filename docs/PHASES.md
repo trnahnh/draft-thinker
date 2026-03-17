@@ -4,7 +4,7 @@
 
 ---
 
-## Phase 1 — Foundation (Week 1–2)
+## Phase 1 — Foundation (Week 1–2) [COMPLETE]
 
 **Goal:** Build the basic proxy that forwards requests to a drafter model and returns responses. No routing logic yet.
 
