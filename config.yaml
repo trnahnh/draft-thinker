@@ -1,0 +1,15 @@
+server:
+  port: 8080
+  read_timeout: 30
+  write_timeout: 120
+  idle_timeout: 60
+
+drafter:
+  provider: groq
+  base_url: https://api.groq.com/openai/v1
+  model: llama3-8b-8192
+  timeout: 30
+
+metrics:
+  enabled: true
+  path: /metrics
