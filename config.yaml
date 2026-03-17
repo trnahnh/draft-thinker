@@ -5,19 +5,19 @@ server:
   idle_timeout: 60
 
 drafter:
-  provider: groq
-  base_url: https://api.groq.com/openai/v1
-  model: llama3-8b-8192
+  provider: openai
+  base_url: https://api.openai.com/v1
+  model: gpt-4.1-nano
   timeout: 30
 
 heavyweight:
   provider: openai
   base_url: https://api.openai.com/v1
-  model: gpt-4o
+  model: gpt-4.1
   timeout: 60
 
 entropy:
-  threshold: 1.5
+  threshold: 2.0
   window_size: 10
   early_exit_count: 10
   top_logprobs: 5

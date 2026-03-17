@@ -26,11 +26,6 @@ func main() {
 		log.Fatalf("loading config: %v", err)
 	}
 
-	groqKey := os.Getenv("GROQ_API_KEY")
-	if groqKey == "" {
-		log.Fatal("GROQ_API_KEY environment variable is required")
-	}
-
 	openaiKey := os.Getenv("OPENAI_API_KEY")
 	if openaiKey == "" {
 		log.Fatal("OPENAI_API_KEY environment variable is required")
@@ -43,17 +38,19 @@ func main() {
 		rec = &metrics.NoopRecorder{}
 	}
 
-	drafter := client.NewGroqClient(
+	drafter := client.NewOpenAICompatibleClient(
 		cfg.Drafter.BaseURL,
-		groqKey,
+		openaiKey,
 		cfg.Drafter.Model,
+		cfg.Drafter.Provider,
 		time.Duration(cfg.Drafter.Timeout)*time.Second,
 	)
 
-	heavyweight := client.NewOpenAIClient(
+	heavyweight := client.NewOpenAICompatibleClient(
 		cfg.Heavyweight.BaseURL,
 		openaiKey,
 		cfg.Heavyweight.Model,
+		cfg.Heavyweight.Provider,
 		time.Duration(cfg.Heavyweight.Timeout)*time.Second,
 	)
 

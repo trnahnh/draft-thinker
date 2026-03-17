@@ -21,13 +21,13 @@ func applyDefaults(cfg *Config) {
 		cfg.Server.IdleTimeout = 60
 	}
 	if cfg.Drafter.Provider == "" {
-		cfg.Drafter.Provider = "groq"
+		cfg.Drafter.Provider = "openai"
 	}
 	if cfg.Drafter.BaseURL == "" {
-		cfg.Drafter.BaseURL = "https://api.groq.com/openai/v1"
+		cfg.Drafter.BaseURL = "https://api.openai.com/v1"
 	}
 	if cfg.Drafter.Model == "" {
-		cfg.Drafter.Model = "llama3-8b-8192"
+		cfg.Drafter.Model = "gpt-4.1-nano"
 	}
 	if cfg.Drafter.Timeout == 0 {
 		cfg.Drafter.Timeout = 30
@@ -39,13 +39,13 @@ func applyDefaults(cfg *Config) {
 		cfg.Heavyweight.BaseURL = "https://api.openai.com/v1"
 	}
 	if cfg.Heavyweight.Model == "" {
-		cfg.Heavyweight.Model = "gpt-4o"
+		cfg.Heavyweight.Model = "gpt-4.1"
 	}
 	if cfg.Heavyweight.Timeout == 0 {
 		cfg.Heavyweight.Timeout = 60
 	}
 	if cfg.Entropy.Threshold == 0 {
-		cfg.Entropy.Threshold = 1.5
+		cfg.Entropy.Threshold = 2.0
 	}
 	if cfg.Entropy.WindowSize == 0 {
 		cfg.Entropy.WindowSize = 10

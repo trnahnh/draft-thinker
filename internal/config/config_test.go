@@ -66,14 +66,14 @@ func TestLoad_Defaults(t *testing.T) {
 	if cfg.Server.WriteTimeout != 120 {
 		t.Errorf("default write_timeout: got %d, want 120", cfg.Server.WriteTimeout)
 	}
-	if cfg.Drafter.Provider != "groq" {
-		t.Errorf("default provider: got %q, want %q", cfg.Drafter.Provider, "groq")
+	if cfg.Drafter.Provider != "openai" {
+		t.Errorf("default provider: got %q, want %q", cfg.Drafter.Provider, "openai")
 	}
-	if cfg.Drafter.BaseURL != "https://api.groq.com/openai/v1" {
+	if cfg.Drafter.BaseURL != "https://api.openai.com/v1" {
 		t.Errorf("default base_url: got %q", cfg.Drafter.BaseURL)
 	}
-	if cfg.Drafter.Model != "llama3-8b-8192" {
-		t.Errorf("default model: got %q, want %q", cfg.Drafter.Model, "llama3-8b-8192")
+	if cfg.Drafter.Model != "gpt-4.1-nano" {
+		t.Errorf("default model: got %q, want %q", cfg.Drafter.Model, "gpt-4.1-nano")
 	}
 	if cfg.Metrics.Path != "/metrics" {
 		t.Errorf("default metrics path: got %q, want %q", cfg.Metrics.Path, "/metrics")
@@ -84,14 +84,14 @@ func TestLoad_Defaults(t *testing.T) {
 	if cfg.Heavyweight.BaseURL != "https://api.openai.com/v1" {
 		t.Errorf("default heavyweight base_url: got %q", cfg.Heavyweight.BaseURL)
 	}
-	if cfg.Heavyweight.Model != "gpt-4o" {
-		t.Errorf("default heavyweight model: got %q, want %q", cfg.Heavyweight.Model, "gpt-4o")
+	if cfg.Heavyweight.Model != "gpt-4.1" {
+		t.Errorf("default heavyweight model: got %q, want %q", cfg.Heavyweight.Model, "gpt-4.1")
 	}
 	if cfg.Heavyweight.Timeout != 60 {
 		t.Errorf("default heavyweight timeout: got %d, want 60", cfg.Heavyweight.Timeout)
 	}
-	if cfg.Entropy.Threshold != 1.5 {
-		t.Errorf("default entropy threshold: got %f, want 1.5", cfg.Entropy.Threshold)
+	if cfg.Entropy.Threshold != 2.0 {
+		t.Errorf("default entropy threshold: got %f, want 2.0", cfg.Entropy.Threshold)
 	}
 	if cfg.Entropy.WindowSize != 10 {
 		t.Errorf("default entropy window_size: got %d, want 10", cfg.Entropy.WindowSize)
