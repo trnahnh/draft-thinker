@@ -55,6 +55,38 @@ func TestPrometheusRecorder_RecordError(t *testing.T) {
 	}
 }
 
+func TestPrometheusRecorder_RecordEntropy(t *testing.T) {
+	rec := NewPrometheusRecorder()
+	rec.RecordEntropy(0.5)
+	rec.RecordEntropy(1.2)
+	rec.RecordEntropy(2.8)
+
+	body := scrapeMetrics(t, rec)
+
+	if !strings.Contains(body, "draftthinker_entropy_distribution") {
+		t.Errorf("expected entropy_distribution metric, got:\n%s", body)
+	}
+	if !strings.Contains(body, `draftthinker_entropy_distribution_count 3`) {
+		t.Errorf("expected 3 observations, got:\n%s", body)
+	}
+}
+
+func TestPrometheusRecorder_RecordRoutingDecision(t *testing.T) {
+	rec := NewPrometheusRecorder()
+	rec.RecordRoutingDecision("accept")
+	rec.RecordRoutingDecision("accept")
+	rec.RecordRoutingDecision("escalate")
+
+	body := scrapeMetrics(t, rec)
+
+	if !strings.Contains(body, `draftthinker_routing_decisions_total{decision="accept"} 2`) {
+		t.Errorf("expected 2 accept decisions, got:\n%s", body)
+	}
+	if !strings.Contains(body, `draftthinker_routing_decisions_total{decision="escalate"} 1`) {
+		t.Errorf("expected 1 escalate decision, got:\n%s", body)
+	}
+}
+
 func scrapeMetrics(t *testing.T, rec *PrometheusRecorder) string {
 	t.Helper()
 	w := httptest.NewRecorder()
