@@ -9,6 +9,8 @@ type ChatCompletionRequest struct {
 	TopP        *float64  `json:"top_p,omitempty"`
 	Stop        []string  `json:"stop,omitempty"`
 	User        string    `json:"user,omitempty"`
+	Logprobs    *bool     `json:"logprobs,omitempty"`
+	TopLogprobs *int      `json:"top_logprobs,omitempty"`
 }
 
 type Message struct {
@@ -26,10 +28,26 @@ type ChatCompletionResponse struct {
 }
 
 type Choice struct {
-	Index        int      `json:"index"`
-	Message      *Message `json:"message,omitempty"`
-	Delta        *Delta   `json:"delta,omitempty"`
-	FinishReason *string  `json:"finish_reason,omitempty"`
+	Index        int             `json:"index"`
+	Message      *Message        `json:"message,omitempty"`
+	Delta        *Delta          `json:"delta,omitempty"`
+	FinishReason *string         `json:"finish_reason,omitempty"`
+	Logprobs     *ChoiceLogprobs `json:"logprobs,omitempty"`
+}
+
+type ChoiceLogprobs struct {
+	Content []TokenLogprob `json:"content"`
+}
+
+type TokenLogprob struct {
+	Token       string            `json:"token"`
+	Logprob     float64           `json:"logprob"`
+	TopLogprobs []TopLogprobEntry `json:"top_logprobs"`
+}
+
+type TopLogprobEntry struct {
+	Token   string  `json:"token"`
+	Logprob float64 `json:"logprob"`
 }
 
 type Delta struct {

@@ -141,6 +141,91 @@ func TestStreamChunk_RoundTrip(t *testing.T) {
 	}
 }
 
+func TestChatCompletionRequest_LogprobsRoundTrip(t *testing.T) {
+	logprobs := true
+	topLogprobs := 5
+	req := ChatCompletionRequest{
+		Model:       "llama3-8b-8192",
+		Messages:    []Message{{Role: "user", Content: "Hello"}},
+		Logprobs:    &logprobs,
+		TopLogprobs: &topLogprobs,
+	}
+
+	data, err := json.Marshal(req)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+
+	var got ChatCompletionRequest
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+
+	if got.Logprobs == nil || !*got.Logprobs {
+		t.Error("logprobs should be true")
+	}
+	if got.TopLogprobs == nil || *got.TopLogprobs != 5 {
+		t.Errorf("top_logprobs: got %v, want 5", got.TopLogprobs)
+	}
+}
+
+func TestChoiceLogprobs_RoundTrip(t *testing.T) {
+	finish := "stop"
+	resp := ChatCompletionResponse{
+		ID:      "chatcmpl-lp",
+		Object:  "chat.completion",
+		Created: 1700000000,
+		Model:   "llama3-8b-8192",
+		Choices: []Choice{
+			{
+				Index:        0,
+				Message:      &Message{Role: "assistant", Content: "4"},
+				FinishReason: &finish,
+				Logprobs: &ChoiceLogprobs{
+					Content: []TokenLogprob{
+						{
+							Token:   "4",
+							Logprob: -0.0001,
+							TopLogprobs: []TopLogprobEntry{
+								{Token: "4", Logprob: -0.0001},
+								{Token: "four", Logprob: -9.21},
+								{Token: "Four", Logprob: -11.5},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	data, err := json.Marshal(resp)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+
+	var got ChatCompletionResponse
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+
+	if got.Choices[0].Logprobs == nil {
+		t.Fatal("logprobs should not be nil")
+	}
+	lp := got.Choices[0].Logprobs.Content[0]
+	if lp.Token != "4" {
+		t.Errorf("token: got %q, want %q", lp.Token, "4")
+	}
+	if lp.Logprob != -0.0001 {
+		t.Errorf("logprob: got %f, want -0.0001", lp.Logprob)
+	}
+	if len(lp.TopLogprobs) != 3 {
+		t.Fatalf("top_logprobs count: got %d, want 3", len(lp.TopLogprobs))
+	}
+	if lp.TopLogprobs[1].Token != "four" {
+		t.Errorf("top_logprobs[1].token: got %q, want %q", lp.TopLogprobs[1].Token, "four")
+	}
+}
+
 func TestErrorResponse_JSON(t *testing.T) {
 	code := "invalid_request_error"
 	errResp := ErrorResponse{
