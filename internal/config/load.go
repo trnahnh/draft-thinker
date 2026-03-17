@@ -56,6 +56,9 @@ func applyDefaults(cfg *Config) {
 	if cfg.Entropy.TopLogprobs == 0 {
 		cfg.Entropy.TopLogprobs = 5
 	}
+	if cfg.Speculative.SoftThresholdMult == 0 {
+		cfg.Speculative.SoftThresholdMult = 0.8
+	}
 	if cfg.Metrics.Path == "" {
 		cfg.Metrics.Path = "/metrics"
 	}
@@ -79,6 +82,9 @@ func validate(cfg *Config) error {
 	}
 	if cfg.Entropy.TopLogprobs < 1 || cfg.Entropy.TopLogprobs > 20 {
 		return fmt.Errorf("entropy.top_logprobs must be between 1 and 20, got %d", cfg.Entropy.TopLogprobs)
+	}
+	if cfg.Speculative.SoftThresholdMult <= 0 || cfg.Speculative.SoftThresholdMult >= 1.0 {
+		return fmt.Errorf("speculative.soft_threshold_mult must be > 0 and < 1.0, got %f", cfg.Speculative.SoftThresholdMult)
 	}
 	return nil
 }

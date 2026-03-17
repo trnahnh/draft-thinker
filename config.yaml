@@ -22,6 +22,10 @@ entropy:
   early_exit_count: 10
   top_logprobs: 5
 
+speculative:
+  enabled: true
+  soft_threshold_mult: 0.8
+
 metrics:
   enabled: true
   path: /metrics

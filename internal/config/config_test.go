@@ -102,6 +102,15 @@ func TestLoad_Defaults(t *testing.T) {
 	if cfg.Entropy.TopLogprobs != 5 {
 		t.Errorf("default entropy top_logprobs: got %d, want 5", cfg.Entropy.TopLogprobs)
 	}
+	if !cfg.Speculative.IsEnabled() {
+		t.Error("default speculative should be enabled when not set")
+	}
+	if cfg.Speculative.Enabled != nil {
+		t.Error("default speculative.enabled should be nil (unset)")
+	}
+	if cfg.Speculative.SoftThresholdMult != 0.8 {
+		t.Errorf("default speculative.soft_threshold_mult: got %f, want 0.8", cfg.Speculative.SoftThresholdMult)
+	}
 }
 
 func TestLoad_InvalidPort(t *testing.T) {
@@ -153,6 +162,66 @@ entropy:
 	_, err := Load(path)
 	if err == nil {
 		t.Fatal("expected error for top_logprobs > 20")
+	}
+}
+
+func TestLoad_SpeculativeDisabled(t *testing.T) {
+	path := writeTestConfig(t, `
+speculative:
+  enabled: false
+  soft_threshold_mult: 0.5
+`)
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if cfg.Speculative.IsEnabled() {
+		t.Error("speculative should be disabled when enabled: false")
+	}
+	if cfg.Speculative.SoftThresholdMult != 0.5 {
+		t.Errorf("soft_threshold_mult: got %f, want 0.5", cfg.Speculative.SoftThresholdMult)
+	}
+}
+
+func TestLoad_SpeculativeDisabledWithoutMult(t *testing.T) {
+	path := writeTestConfig(t, `
+speculative:
+  enabled: false
+`)
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if cfg.Speculative.IsEnabled() {
+		t.Error("speculative should be disabled when explicitly set to false")
+	}
+}
+
+func TestLoad_InvalidSoftThresholdMult_TooHigh(t *testing.T) {
+	path := writeTestConfig(t, `
+speculative:
+  soft_threshold_mult: 1.0
+`)
+
+	_, err := Load(path)
+	if err == nil {
+		t.Fatal("expected error for soft_threshold_mult = 1.0")
+	}
+}
+
+func TestLoad_InvalidSoftThresholdMult_Negative(t *testing.T) {
+	path := writeTestConfig(t, `
+speculative:
+  soft_threshold_mult: -0.5
+`)
+
+	_, err := Load(path)
+	if err == nil {
+		t.Fatal("expected error for negative soft_threshold_mult")
 	}
 }
 

@@ -5,7 +5,20 @@ type Config struct {
 	Drafter     DrafterConfig     `yaml:"drafter"`
 	Heavyweight HeavyweightConfig `yaml:"heavyweight"`
 	Entropy     EntropyConfig     `yaml:"entropy"`
+	Speculative SpeculativeConfig `yaml:"speculative"`
 	Metrics     MetricsConfig     `yaml:"metrics"`
+}
+
+type SpeculativeConfig struct {
+	Enabled           *bool   `yaml:"enabled"`
+	SoftThresholdMult float64 `yaml:"soft_threshold_mult"`
+}
+
+func (s SpeculativeConfig) IsEnabled() bool {
+	if s.Enabled == nil {
+		return true
+	}
+	return *s.Enabled
 }
 
 type ServerConfig struct {
