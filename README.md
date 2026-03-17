@@ -8,9 +8,9 @@ LLM-powered applications send 100% of traffic to frontier models regardless of q
 
 - **Cost**: 70%+ of queries are answerable by models costing 10–50x less.
 - **Latency**: Frontier models have 2–5x higher time-to-first-token than small models.
-- **Scale**: At high throughput, frontier model rate limits become the bottleneck — not your application.
+- **Scale**: At high throughput, frontier model rate limits become the bottleneck, not your application.
 
-The hard part isn't routing — it's knowing *when* the cheap model is good enough without already having the right answer. Prompt classifiers ("is this question easy?") fail on distribution shift. A syntactically simple question can require complex reasoning depending on context.
+The hard part isn't routing -- it's knowing *when* the cheap model is good enough without already having the right answer. Prompt classifiers ("is this question easy?") fail on distribution shift. A syntactically simple question can require complex reasoning depending on context.
 
 ## The Approach
 
@@ -20,24 +20,24 @@ The gateway watches these signals in real-time as the drafter generates. If conf
 
 ### Entropy-Based Routing
 
-The core mechanism computes Shannon entropy over the drafter's token logprobabilities using a sliding window. A calibrated threshold determines the routing decision — pass the draft or escalate. The threshold is set empirically by sweeping a benchmark dataset and finding the knee of the accuracy-cost curve.
+The core mechanism computes Shannon entropy over the drafter's token logprobabilities using a sliding window. A calibrated threshold determines the routing decision: pass the draft or escalate. The threshold is set empirically by sweeping a benchmark dataset and finding the knee of the accuracy-cost curve.
 
 The known failure mode is confident hallucination: the drafter produces a wrong answer with low entropy. This is mitigated by periodic accuracy audits, downstream feedback loops, and a conservative initial threshold. It's a documented tradeoff, not a bug.
 
 ### Speculative Execution
 
-Naive draft-then-verify is serial — hard questions pay double latency. Draft-Thinker fires the heavyweight model in parallel when early tokens show elevated (but not yet critical) uncertainty. If the drafter recovers, the heavyweight call is canceled. If not, the heavyweight already has a head start.
+Naive draft-then-verify is serial. Hard questions pay double latency. Draft-Thinker fires the heavyweight model in parallel when early tokens show elevated (but not yet critical) uncertainty. If the drafter recovers, the heavyweight call is canceled. If not, the heavyweight already has a head start.
 
 The additional latency on escalated requests is `heavyweight_total - drafter_abort_time`, not the full heavyweight latency.
 
 ### Semantic Cache
 
-Previously verified prompt-response pairs are cached via embedding similarity (all-MiniLM-L6-v2 + Qdrant). If an incoming prompt is semantically similar (cosine > 0.95) to a cached entry, the response is returned directly — bypassing the entire draft-verify cycle.
+Previously verified prompt-response pairs are cached via embedding similarity (all-MiniLM-L6-v2 + Qdrant). If an incoming prompt is semantically similar (cosine > 0.95) to a cached entry, the response is returned directly, bypassing the entire draft-verify cycle.
 
 ## Tech Stack
 
 - **Gateway** (Go `net/http`): Goroutines for concurrent I/O. The bottleneck is API latency, not compute.
-- **Entropy engine** (Go `math`): Pure math — no reason to cross a language boundary.
+- **Entropy engine** (Go `math`): Pure math, no reason to cross a language boundary.
 - **Drafter** (OpenAI gpt-4.1-nano): Fast, cheap, returns logprobs.
 - **Heavyweight** (OpenAI gpt-4.1): Capable model for escalation. Real API costs for honest benchmarking.
 - **Vector cache** (Qdrant): Nearest-neighbor lookup for semantic cache.
@@ -45,7 +45,7 @@ Previously verified prompt-response pairs are cached via embedding similarity (a
 - **Observability** (Prometheus + Grafana): Custom metrics: cost/request, entropy distributions, cache hit rate.
 - **Deployment** (Docker Compose): Single command spins up gateway, Redis, Qdrant, Grafana.
 
-No Python in the hot path. The draft-verify state machine is a Go switch statement. LangGraph was considered and rejected — cross-language IPC contradicts the latency story.
+No Python in the hot path. The draft-verify state machine is a Go switch statement. LangGraph was considered and rejected. Cross-language IPC contradicts the latency story.
 
 ## Current State
 
@@ -93,18 +93,18 @@ curl http://localhost:8080/v1/chat/completions \
 
 ## Documentation
 
-- [System Design](docs/SYSTEM_DESIGN.md) — architecture, entropy algorithm, speculative execution, cache design
-- [Development Phases](docs/PHASES.md) — deliverables, exit criteria, and timeline per phase
+- [System Design](docs/SYSTEM_DESIGN.md) -- architecture, entropy algorithm, speculative execution, cache design
+- [Development Phases](docs/PHASES.md) -- deliverables, exit criteria, and timeline per phase
 
 ## Why This Exists
 
-This is a portfolio project targeting Fall 2026 co-op applications at quantitative finance and top tech firms. It demonstrates distributed systems design, production engineering judgment, and the ability to build infrastructure that saves real money — with every claim backed by measured data.
+This is a portfolio project targeting Fall 2026 co-op applications at quantitative finance and top tech firms. It demonstrates distributed systems design, production engineering judgment, and the ability to build infrastructure that saves real money, with every claim backed by measured data.
 
 It pairs with [Ferrox](https://github.com/trnahnh/ferrox), a low-latency order matching engine in Rust (500ns P99, 4.7M orders/sec). Together they cover both ends of the systems spectrum: Ferrox is CPU-bound mechanical sympathy; Draft-Thinker is network-bound distributed systems.
 
 ## Contact
 
-**Anh Tran** — [anhdtran.forwork@gmail.com](mailto:anhdtran.forwork@gmail.com)
+**Anh Tran** -- [anhdtran.forwork@gmail.com](mailto:anhdtran.forwork@gmail.com)
 
 ## License
 

@@ -90,7 +90,7 @@ The drafter can produce confidently wrong answers (low entropy, bad output). Thi
 1. Periodic accuracy audits on draft-accepted responses
 2. Downstream feedback loop for flagging bad responses
 3. Conservative initial threshold (err toward escalation)
-4. Accept as a tradeoff — optimizing cost, not eliminating errors
+4. Accept as a tradeoff -- optimizing cost, not eliminating errors
 
 ---
 
@@ -194,7 +194,7 @@ The cache lookup runs on the request's hot path but the vector store query is se
 |Layer|Technology|Rationale|
 |-----|----------|---------|
 |**Gateway**|Go (`net/http`)|Goroutines for concurrent request handling. No framework overhead. Native HTTP/2.|
-|**Entropy Engine**|Go (`math`)|Entropy computation is pure math — no need to cross language boundary.|
+|**Entropy Engine**|Go (`math`)|Entropy computation is pure math, no need to cross language boundary.|
 |**Drafter Models**|OpenAI (gpt-4.1-nano)|Fast, cheap, returns logprobs.|
 |**Heavyweight**|OpenAI (gpt-4.1)|Escalation target. Real API costs for benchmarking.|
 |**Cache (KV)**|Redis|Metadata, TTLs, rate counters.|

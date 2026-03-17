@@ -4,7 +4,7 @@
 
 ---
 
-## Phase 1 — Foundation (Week 1–2) [COMPLETE]
+## Phase 1 -- Foundation (Week 1-2) [COMPLETE]
 
 **Goal:** Build the basic proxy that forwards requests to a drafter model and returns responses. No routing logic yet.
 
@@ -23,7 +23,7 @@ A client can send a chat completion request to the gateway and receive a streame
 
 ---
 
-## Phase 2 — Entropy Engine (Week 3–4) [COMPLETE]
+## Phase 2 -- Entropy Engine (Week 3-4) [COMPLETE]
 
 **Goal:** Implement the entropy computation pipeline and make the first routing decisions.
 
@@ -86,7 +86,7 @@ Escalated requests show measurably lower P99 latency compared to Phase 2's seria
 
 ---
 
-## Phase 5 — Semantic Cache (Week 7)
+## Phase 5 -- Semantic Cache (Week 7)
 
 **Goal:** Cache verified responses to skip the draft-verify cycle on repeated reasoning patterns.
 
@@ -105,7 +105,7 @@ Repeated or semantically similar queries return cached responses with **< 50ms l
 
 ---
 
-## Phase 6 — Production Hardening & Documentation (Week 8)
+## Phase 6 -- Production Hardening & Documentation (Week 8)
 
 **Goal:** Make the project interview-ready and publicly presentable.
 
@@ -128,7 +128,7 @@ The project is deployed, documented, and you can walk an interviewer through eve
 |Week|Phase|Key Deliverable|
 |---|-----|---------------|
 |1-2|Foundation|Working proxy with OpenAI integration|
-|3–4|Entropy Engine|Routing decisions based on token entropy|
+|3-4|Entropy Engine|Routing decisions based on token entropy|
 |5|Calibration|Threshold selected with accuracy-cost curve|
 |6|Speculative Execution|Parallel escalation with cancellation|
 |7|Semantic Cache|Vector-based response caching|
