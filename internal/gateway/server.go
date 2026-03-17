@@ -9,6 +9,7 @@ import (
 
 	"github.com/trnahnh/draft-thinker/internal/config"
 	"github.com/trnahnh/draft-thinker/internal/metrics"
+	"github.com/trnahnh/draft-thinker/internal/router"
 	"github.com/trnahnh/draft-thinker/pkg/client"
 )
 
@@ -17,10 +18,10 @@ type Server struct {
 	cfg        *config.Config
 }
 
-func NewServer(cfg *config.Config, llm client.LLMClient, rec metrics.Recorder) *Server {
+func NewServer(cfg *config.Config, drafter, heavyweight client.LLMClient, rtr *router.Router, rec metrics.Recorder) *Server {
 	mux := http.NewServeMux()
 
-	chatH := newChatHandler(llm, rec)
+	chatH := newChatHandler(drafter, heavyweight, rtr, rec, cfg.Entropy)
 	mux.Handle("/v1/chat/completions", chatH)
 
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -52,7 +53,6 @@ func NewServer(cfg *config.Config, llm client.LLMClient, rec metrics.Recorder) *
 	}
 }
 
-// Start blocks until the server is shut down.
 func (s *Server) Start() error {
 	log.Printf("starting gateway on %s", s.httpServer.Addr)
 	if err := s.httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {

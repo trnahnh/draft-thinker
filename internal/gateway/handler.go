@@ -7,18 +7,30 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/trnahnh/draft-thinker/internal/config"
+	"github.com/trnahnh/draft-thinker/internal/entropy"
 	"github.com/trnahnh/draft-thinker/internal/metrics"
+	"github.com/trnahnh/draft-thinker/internal/router"
 	"github.com/trnahnh/draft-thinker/pkg/client"
 	"github.com/trnahnh/draft-thinker/pkg/protocol"
 )
 
 type chatHandler struct {
-	client   client.LLMClient
-	recorder metrics.Recorder
+	drafter     client.LLMClient
+	heavyweight client.LLMClient
+	router      *router.Router
+	recorder    metrics.Recorder
+	entropyCfg  config.EntropyConfig
 }
 
-func newChatHandler(c client.LLMClient, rec metrics.Recorder) *chatHandler {
-	return &chatHandler{client: c, recorder: rec}
+func newChatHandler(drafter, heavyweight client.LLMClient, rtr *router.Router, rec metrics.Recorder, entropyCfg config.EntropyConfig) *chatHandler {
+	return &chatHandler{
+		drafter:     drafter,
+		heavyweight: heavyweight,
+		router:      rtr,
+		recorder:    rec,
+		entropyCfg:  entropyCfg,
+	}
 }
 
 func (h *chatHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -27,7 +39,7 @@ func (h *chatHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1 MB limit
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 
 	var req protocol.ChatCompletionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -52,17 +64,50 @@ func (h *chatHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (h *chatHandler) handleComplete(w http.ResponseWriter, r *http.Request, req *protocol.ChatCompletionRequest) {
 	start := time.Now()
 
-	resp, err := h.client.Complete(r.Context(), req)
-	elapsed := time.Since(start)
-	h.recorder.RecordUpstreamLatency("groq", elapsed)
+	drafterReq := h.cloneForDrafter(req)
 
+	ch, err := h.drafter.Stream(r.Context(), drafterReq)
 	if err != nil {
+		elapsed := time.Since(start)
+		h.recorder.RecordUpstreamLatency("drafter", elapsed)
 		h.handleUpstreamError(w, err)
 		return
 	}
 
-	h.recorder.RecordRequest(resp.Model, http.StatusOK)
+	result, err := h.router.Route(r.Context(), ch)
+	elapsed := time.Since(start)
+	h.recorder.RecordUpstreamLatency("drafter", elapsed)
 
+	if err != nil {
+		h.recorder.RecordError("routing_error")
+		writeInternalError(w, "routing error")
+		log.Printf("routing error: %v", err)
+		return
+	}
+
+	if result.Decision == entropy.Escalate {
+		h.recorder.RecordRoutingDecision("escalate")
+		log.Printf("escalating to heavyweight (tokens=%d, avg_entropy=%.3f)",
+			result.TokenCount, avgEntropy(result.Entropies))
+
+		hvStart := time.Now()
+		resp, err := h.heavyweight.Complete(r.Context(), req)
+		h.recorder.RecordUpstreamLatency("heavyweight", time.Since(hvStart))
+
+		if err != nil {
+			h.handleUpstreamError(w, err)
+			return
+		}
+
+		h.recorder.RecordRequest(resp.Model, http.StatusOK)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(resp)
+		return
+	}
+
+	h.recorder.RecordRoutingDecision("accept")
+	resp := assembleResponse(result.DraftChunks)
+	h.recorder.RecordRequest(resp.Model, http.StatusOK)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(resp)
 }
@@ -70,11 +115,24 @@ func (h *chatHandler) handleComplete(w http.ResponseWriter, r *http.Request, req
 func (h *chatHandler) handleStream(w http.ResponseWriter, r *http.Request, req *protocol.ChatCompletionRequest) {
 	start := time.Now()
 
-	ch, err := h.client.Stream(r.Context(), req)
+	drafterReq := h.cloneForDrafter(req)
+
+	ch, err := h.drafter.Stream(r.Context(), drafterReq)
 	if err != nil {
 		elapsed := time.Since(start)
-		h.recorder.RecordUpstreamLatency("groq", elapsed)
+		h.recorder.RecordUpstreamLatency("drafter", elapsed)
 		h.handleUpstreamError(w, err)
+		return
+	}
+
+	result, err := h.router.Route(r.Context(), ch)
+	elapsed := time.Since(start)
+	h.recorder.RecordUpstreamLatency("drafter", elapsed)
+
+	if err != nil {
+		h.recorder.RecordError("routing_error")
+		writeInternalError(w, "routing error")
+		log.Printf("routing error: %v", err)
 		return
 	}
 
@@ -84,46 +142,97 @@ func (h *chatHandler) handleStream(w http.ResponseWriter, r *http.Request, req *
 		return
 	}
 
+	if result.Decision == entropy.Escalate {
+		h.recorder.RecordRoutingDecision("escalate")
+		log.Printf("escalating to heavyweight (tokens=%d, avg_entropy=%.3f)",
+			result.TokenCount, avgEntropy(result.Entropies))
+
+		hvStart := time.Now()
+		hvCh, err := h.heavyweight.Stream(r.Context(), req)
+		if err != nil {
+			h.recorder.RecordUpstreamLatency("heavyweight", time.Since(hvStart))
+			h.handleUpstreamError(w, err)
+			return
+		}
+
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Cache-Control", "no-cache")
+		w.Header().Set("Connection", "keep-alive")
+		w.WriteHeader(http.StatusOK)
+		flusher.Flush()
+
+		firstChunk := true
+		model := "unknown"
+
+		for sc := range hvCh {
+			if sc.Err != nil {
+				log.Printf("heavyweight stream error: %v", sc.Err)
+				h.recorder.RecordError("stream_error")
+				break
+			}
+
+			if firstChunk {
+				h.recorder.RecordUpstreamLatency("heavyweight", time.Since(hvStart))
+				firstChunk = false
+			}
+
+			if sc.Chunk != nil {
+				model = sc.Chunk.Model
+				data, err := json.Marshal(sc.Chunk)
+				if err != nil {
+					log.Printf("marshal chunk error: %v", err)
+					continue
+				}
+				if _, err := fmt.Fprintf(w, "data: %s\n\n", data); err != nil {
+					break
+				}
+				flusher.Flush()
+			}
+		}
+
+		fmt.Fprint(w, "data: [DONE]\n\n")
+		flusher.Flush()
+		h.recorder.RecordRequest(model, http.StatusOK)
+		return
+	}
+
+	h.recorder.RecordRoutingDecision("accept")
+
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 	w.WriteHeader(http.StatusOK)
 	flusher.Flush()
 
-	firstChunk := true
 	model := "unknown"
-
-	for sc := range ch {
-		if sc.Err != nil {
-			log.Printf("stream error: %v", sc.Err)
-			h.recorder.RecordError("stream_error")
+	for _, chunk := range result.DraftChunks {
+		model = chunk.Model
+		data, err := json.Marshal(chunk)
+		if err != nil {
+			log.Printf("marshal chunk error: %v", err)
+			continue
+		}
+		if _, err := fmt.Fprintf(w, "data: %s\n\n", data); err != nil {
 			break
 		}
-
-		if firstChunk {
-			elapsed := time.Since(start)
-			h.recorder.RecordUpstreamLatency("groq", elapsed)
-			firstChunk = false
-		}
-
-		if sc.Chunk != nil {
-			model = sc.Chunk.Model
-			data, err := json.Marshal(sc.Chunk)
-			if err != nil {
-				log.Printf("marshal chunk error: %v", err)
-				continue
-			}
-			if _, err := fmt.Fprintf(w, "data: %s\n\n", data); err != nil {
-				break
-			}
-			flusher.Flush()
-		}
+		flusher.Flush()
 	}
 
 	fmt.Fprint(w, "data: [DONE]\n\n")
 	flusher.Flush()
-
 	h.recorder.RecordRequest(model, http.StatusOK)
+}
+
+func (h *chatHandler) cloneForDrafter(req *protocol.ChatCompletionRequest) *protocol.ChatCompletionRequest {
+	clone := *req
+	clone.Messages = make([]protocol.Message, len(req.Messages))
+	copy(clone.Messages, req.Messages)
+	clone.Stream = true
+	logprobs := true
+	clone.Logprobs = &logprobs
+	topLogprobs := h.entropyCfg.TopLogprobs
+	clone.TopLogprobs = &topLogprobs
+	return &clone
 }
 
 func (h *chatHandler) handleUpstreamError(w http.ResponseWriter, err error) {
@@ -142,4 +251,15 @@ func (h *chatHandler) handleUpstreamError(w http.ResponseWriter, err error) {
 		writeInternalError(w, "internal server error")
 		log.Printf("unexpected upstream error: %v", err)
 	}
+}
+
+func avgEntropy(entropies []entropy.TokenEntropy) float64 {
+	if len(entropies) == 0 {
+		return 0
+	}
+	sum := 0.0
+	for _, e := range entropies {
+		sum += e.Entropy
+	}
+	return sum / float64(len(entropies))
 }

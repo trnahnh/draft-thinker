@@ -10,8 +10,10 @@ import (
 	"time"
 
 	"github.com/trnahnh/draft-thinker/internal/config"
+	"github.com/trnahnh/draft-thinker/internal/entropy"
 	"github.com/trnahnh/draft-thinker/internal/gateway"
 	"github.com/trnahnh/draft-thinker/internal/metrics"
+	"github.com/trnahnh/draft-thinker/internal/router"
 	"github.com/trnahnh/draft-thinker/pkg/client"
 )
 
@@ -24,9 +26,14 @@ func main() {
 		log.Fatalf("loading config: %v", err)
 	}
 
-	apiKey := os.Getenv("GROQ_API_KEY")
-	if apiKey == "" {
+	groqKey := os.Getenv("GROQ_API_KEY")
+	if groqKey == "" {
 		log.Fatal("GROQ_API_KEY environment variable is required")
+	}
+
+	openaiKey := os.Getenv("OPENAI_API_KEY")
+	if openaiKey == "" {
+		log.Fatal("OPENAI_API_KEY environment variable is required")
 	}
 
 	var rec metrics.Recorder
@@ -36,14 +43,27 @@ func main() {
 		rec = &metrics.NoopRecorder{}
 	}
 
-	llm := client.NewGroqClient(
+	drafter := client.NewGroqClient(
 		cfg.Drafter.BaseURL,
-		apiKey,
+		groqKey,
 		cfg.Drafter.Model,
 		time.Duration(cfg.Drafter.Timeout)*time.Second,
 	)
 
-	srv := gateway.NewServer(cfg, llm, rec)
+	heavyweight := client.NewOpenAIClient(
+		cfg.Heavyweight.BaseURL,
+		openaiKey,
+		cfg.Heavyweight.Model,
+		time.Duration(cfg.Heavyweight.Timeout)*time.Second,
+	)
+
+	rtr := router.NewRouter(entropy.WindowConfig{
+		Size:           cfg.Entropy.WindowSize,
+		Threshold:      cfg.Entropy.Threshold,
+		EarlyExitCount: cfg.Entropy.EarlyExitCount,
+	}, rec)
+
+	srv := gateway.NewServer(cfg, drafter, heavyweight, rtr, rec)
 
 	errCh := make(chan error, 1)
 	go func() {

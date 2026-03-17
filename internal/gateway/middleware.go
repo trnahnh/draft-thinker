@@ -93,7 +93,6 @@ func recoveryMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// chain applies middleware in order (outermost first).
 func chain(h http.Handler, middlewares ...func(http.Handler) http.Handler) http.Handler {
 	for i := len(middlewares) - 1; i >= 0; i-- {
 		h = middlewares[i](h)
