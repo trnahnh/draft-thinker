@@ -10,6 +10,18 @@ drafter:
   model: llama3-8b-8192
   timeout: 30
 
+heavyweight:
+  provider: openai
+  base_url: https://api.openai.com/v1
+  model: gpt-4o
+  timeout: 60
+
+entropy:
+  threshold: 1.5
+  window_size: 10
+  early_exit_count: 10
+  top_logprobs: 5
+
 metrics:
   enabled: true
   path: /metrics

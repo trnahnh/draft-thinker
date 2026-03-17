@@ -1,9 +1,11 @@
 package config
 
 type Config struct {
-	Server  ServerConfig  `yaml:"server"`
-	Drafter DrafterConfig `yaml:"drafter"`
-	Metrics MetricsConfig `yaml:"metrics"`
+	Server      ServerConfig      `yaml:"server"`
+	Drafter     DrafterConfig     `yaml:"drafter"`
+	Heavyweight HeavyweightConfig `yaml:"heavyweight"`
+	Entropy     EntropyConfig     `yaml:"entropy"`
+	Metrics     MetricsConfig     `yaml:"metrics"`
 }
 
 type ServerConfig struct {
@@ -18,6 +20,20 @@ type DrafterConfig struct {
 	BaseURL  string `yaml:"base_url"`
 	Model    string `yaml:"model"`
 	Timeout  int    `yaml:"timeout"`
+}
+
+type HeavyweightConfig struct {
+	Provider string `yaml:"provider"`
+	BaseURL  string `yaml:"base_url"`
+	Model    string `yaml:"model"`
+	Timeout  int    `yaml:"timeout"`
+}
+
+type EntropyConfig struct {
+	Threshold      float64 `yaml:"threshold"`
+	WindowSize     int     `yaml:"window_size"`
+	EarlyExitCount int     `yaml:"early_exit_count"`
+	TopLogprobs    int     `yaml:"top_logprobs"`
 }
 
 type MetricsConfig struct {

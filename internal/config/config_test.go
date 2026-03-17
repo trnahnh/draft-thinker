@@ -78,6 +78,30 @@ func TestLoad_Defaults(t *testing.T) {
 	if cfg.Metrics.Path != "/metrics" {
 		t.Errorf("default metrics path: got %q, want %q", cfg.Metrics.Path, "/metrics")
 	}
+	if cfg.Heavyweight.Provider != "openai" {
+		t.Errorf("default heavyweight provider: got %q, want %q", cfg.Heavyweight.Provider, "openai")
+	}
+	if cfg.Heavyweight.BaseURL != "https://api.openai.com/v1" {
+		t.Errorf("default heavyweight base_url: got %q", cfg.Heavyweight.BaseURL)
+	}
+	if cfg.Heavyweight.Model != "gpt-4o" {
+		t.Errorf("default heavyweight model: got %q, want %q", cfg.Heavyweight.Model, "gpt-4o")
+	}
+	if cfg.Heavyweight.Timeout != 60 {
+		t.Errorf("default heavyweight timeout: got %d, want 60", cfg.Heavyweight.Timeout)
+	}
+	if cfg.Entropy.Threshold != 1.5 {
+		t.Errorf("default entropy threshold: got %f, want 1.5", cfg.Entropy.Threshold)
+	}
+	if cfg.Entropy.WindowSize != 10 {
+		t.Errorf("default entropy window_size: got %d, want 10", cfg.Entropy.WindowSize)
+	}
+	if cfg.Entropy.EarlyExitCount != 10 {
+		t.Errorf("default entropy early_exit_count: got %d, want 10", cfg.Entropy.EarlyExitCount)
+	}
+	if cfg.Entropy.TopLogprobs != 5 {
+		t.Errorf("default entropy top_logprobs: got %d, want 5", cfg.Entropy.TopLogprobs)
+	}
 }
 
 func TestLoad_InvalidPort(t *testing.T) {
@@ -105,5 +129,41 @@ func TestLoad_InvalidYAML(t *testing.T) {
 	_, err := Load(path)
 	if err == nil {
 		t.Fatal("expected error for invalid YAML")
+	}
+}
+
+func TestLoad_InvalidEntropyThreshold(t *testing.T) {
+	path := writeTestConfig(t, `
+entropy:
+  threshold: -1.0
+`)
+
+	_, err := Load(path)
+	if err == nil {
+		t.Fatal("expected error for negative entropy threshold")
+	}
+}
+
+func TestLoad_InvalidTopLogprobs(t *testing.T) {
+	path := writeTestConfig(t, `
+entropy:
+  top_logprobs: 25
+`)
+
+	_, err := Load(path)
+	if err == nil {
+		t.Fatal("expected error for top_logprobs > 20")
+	}
+}
+
+func TestLoad_InvalidWindowSize(t *testing.T) {
+	path := writeTestConfig(t, `
+entropy:
+  window_size: -1
+`)
+
+	_, err := Load(path)
+	if err == nil {
+		t.Fatal("expected error for window_size < 1")
 	}
 }
