@@ -23,7 +23,7 @@ A client can send a chat completion request to the gateway and receive a streame
 
 ---
 
-## Phase 2 — Entropy Engine (Week 3–4)
+## Phase 2 — Entropy Engine (Week 3–4) [COMPLETE]
 
 **Goal:** Implement the entropy computation pipeline and make the first routing decisions.
 
