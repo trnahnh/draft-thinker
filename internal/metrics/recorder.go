@@ -8,4 +8,7 @@ type Recorder interface {
 	RecordError(errorType string)
 	RecordEntropy(value float64)
 	RecordRoutingDecision(decision string)
+	RecordSpeculativeTrigger()
+	RecordSpeculativeCancellation()
+	RecordSpeculativeLatencySaved(duration time.Duration)
 }
