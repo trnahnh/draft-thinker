@@ -60,7 +60,7 @@ The gateway routes requests to either the drafter or heavyweight model based on 
 
 ---
 
-## Phase 4 — Speculative Execution (Week 6)
+## Phase 4 -- Speculative Execution (Week 6) [COMPLETE]
 
 **Goal:** Eliminate the latency penalty on escalated requests.
 
@@ -72,10 +72,13 @@ The gateway routes requests to either the drafter or heavyweight model based on 
 - Request lifecycle state machine:
 
   ```text
-  DRAFTING → SPECULATING → ESCALATED | DRAFT_ACCEPTED
+  DRAFTING -> SPECULATING -> ESCALATED | DRAFT_ACCEPTED
   ```
 
-- Metrics: speculative execution trigger rate, cancellation rate, latency improvement on escalated requests
+- Metrics: speculative trigger rate, cancellation rate, latency saved on escalated requests
+- Config: `speculative.enabled` (default true), `speculative.soft_threshold_mult` (default 0.8)
+- Graceful fallback: if speculative heavyweight fails to start, continues in drafting state
+- Serial path preserved when `speculative.enabled: false`
 
 ### Phase 4 exit criteria
 

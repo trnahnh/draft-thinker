@@ -91,3 +91,27 @@ The sweep tool auto-selects the threshold with the highest F1 score among thresh
 |2.50|0.0%|97.9%|99.2%|0.00|
 
 Selected threshold: **T=2.0** (94% draft acceptance, 98.2% accuracy, 91.6% cost reduction).
+
+## Phase 4 Metrics
+
+Phase 4 added speculative execution. Three new Prometheus instruments track when the gateway fires a parallel heavyweight call, whether it gets used or cancelled, and how much latency the head start saves.
+
+|Metric|Type|Labels|Description|
+|---|---|---|---|
+|`draftthinker_speculative_triggers_total`|Counter|(none)|Total speculative heavyweight calls fired (soft threshold exceeded)|
+|`draftthinker_speculative_cancellations_total`|Counter|(none)|Speculative calls cancelled (drafter recovered before hard threshold)|
+|`draftthinker_speculative_latency_saved_seconds`|Histogram|(none)|Head-start time saved on escalated requests that had a running speculative call|
+
+### Latency Saved Histogram Buckets
+
+`speculative_latency_saved_seconds` uses the same bucket boundaries as `upstream_latency_seconds`:
+
+```text
+0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30
+```
+
+### Interpreting Speculative Metrics
+
+- **Trigger rate** = `speculative_triggers_total` / `requests_total`. Healthy range depends on workload; higher means more requests hit the soft threshold.
+- **Cancellation ratio** = `speculative_cancellations_total` / `speculative_triggers_total`. This is wasted compute. Target < 10% of total escalation cost.
+- **Latency saved** = the histogram shows how much head start the heavyweight got before escalation confirmed. Higher values mean more latency eliminated from the user-facing request.
