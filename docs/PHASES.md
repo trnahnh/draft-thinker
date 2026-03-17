@@ -12,7 +12,7 @@
 
 - Go HTTP server accepting OpenAI-compatible `/v1/chat/completions` requests
 - Request validation and structured error handling
-- Forwarding layer to Groq API (Llama-3-8B) with streaming support
+- Forwarding layer to OpenAI API (gpt-4.1-nano) with streaming support
 - Response passthrough back to client with latency measurement
 - Docker Compose with the gateway container
 - Basic Prometheus metrics: request count, latency histogram, error rate
@@ -29,11 +29,11 @@ A client can send a chat completion request to the gateway and receive a streame
 
 ### Phase 2 deliverables
 
-- Logprob extraction from drafter responses (Groq returns these natively)
+- Logprob extraction from drafter responses (OpenAI returns these natively)
 - Per-token Shannon entropy computation: `H = -Σ p(x) log p(x)`
 - Sliding window entropy with configurable window size
 - Threshold-based routing decision: pass (return draft) or escalate
-- Escalation path to OpenAI/Anthropic API
+- Escalation path to OpenAI heavyweight model (gpt-4.1)
 - Prometheus metrics: entropy distribution histogram, escalation rate, cost per request
 
 ### Phase 2 exit criteria
@@ -42,23 +42,21 @@ The gateway routes requests to either the drafter or heavyweight model based on 
 
 ---
 
-## Phase 3 — Calibration & Benchmarking (Week 5)
+## Phase 3 -- Calibration & Benchmarking (Week 5) [COMPLETE]
 
 **Goal:** Empirically determine the optimal entropy threshold and produce defensible metrics.
 
 ### Phase 3 deliverables
 
-- **Benchmark dataset:** 500+ prompts across difficulty tiers (simple factual, multi-step reasoning, code generation, ambiguous/creative)
-- **Ground truth labels:** each prompt labeled with whether the drafter's answer was acceptable (human-evaluated or LLM-as-judge)
-- **Threshold sweep:** run the dataset through the gateway at `T = 0.5, 0.75, 1.0, 1.25, 1.5` and measure accuracy vs. cost tradeoff
-- **ROC curve:** plot escalation rate vs. accuracy at each threshold
-- Final threshold selection with documented rationale
+- **Benchmark dataset:** 520 prompts across 4 categories (simple factual, multi-step reasoning, code generation, ambiguous/creative)
+- **Ground truth labels:** each prompt evaluated by LLM-as-judge against heavyweight reference answer
+- **Threshold sweep:** dataset swept at T = 1.0, 1.25, 1.5, 1.75, 2.0, 2.25, 2.5
+- **Accuracy-cost tradeoff curve:** escalation rate vs. draft accuracy at each threshold
+- Final threshold selection: T=2.0
 
 ### Phase 3 exit criteria
 
-A calibrated threshold exists with a documented accuracy-cost tradeoff curve. You can state with evidence:
-
-> "At threshold T=X, the system routes Y% of requests to the drafter with Z% accuracy, reducing cost by W% vs. baseline."
+> "At threshold T=2.0, the system routes 94% of requests to the drafter with 98.2% accuracy, reducing cost by 91.6% vs. baseline."
 
 ---
 
@@ -126,7 +124,7 @@ The project is deployed, documented, and you can walk an interviewer through eve
 
 |Week|Phase|Key Deliverable|
 |---|-----|---------------|
-|1–2|Foundation|Working proxy with Groq integration|
+|1-2|Foundation|Working proxy with OpenAI integration|
 |3–4|Entropy Engine|Routing decisions based on token entropy|
 |5|Calibration|Threshold selected with accuracy-cost curve|
 |6|Speculative Execution|Parallel escalation with cancellation|

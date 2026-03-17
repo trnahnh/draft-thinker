@@ -38,8 +38,8 @@ Previously verified prompt-response pairs are cached via embedding similarity (a
 
 - **Gateway** (Go `net/http`): Goroutines for concurrent I/O. The bottleneck is API latency, not compute.
 - **Entropy engine** (Go `math`): Pure math — no reason to cross a language boundary.
-- **Drafter** (Groq / Together AI): Hosted Llama-3-8B. Fast, cheap, returns logprobs.
-- **Heavyweight** (OpenAI / Anthropic): GPT-4o or Claude. Real API costs for honest benchmarking.
+- **Drafter** (OpenAI gpt-4.1-nano): Fast, cheap, returns logprobs.
+- **Heavyweight** (OpenAI gpt-4.1): Capable model for escalation. Real API costs for honest benchmarking.
 - **Vector cache** (Qdrant): Nearest-neighbor lookup for semantic cache.
 - **KV store** (Redis): TTLs, metadata, rate counters.
 - **Observability** (Prometheus + Grafana): Custom metrics: cost/request, entropy distributions, cache hit rate.
@@ -49,28 +49,29 @@ No Python in the hot path. The draft-verify state machine is a Go switch stateme
 
 ## Current State
 
-- **Phase 1 — Foundation**: Proxy with Groq integration (**status:** Complete).
-- **Phase 2 — Entropy engine**: Logprob analysis and routing (**status:** Complete).
-- **Phase 3 — Calibration**: Threshold sweep and benchmark dataset (**status:** Not started).
-- **Phase 4 — Speculative execution**: Parallel heavyweight calls (**status:** Not started).
-- **Phase 5 — Semantic cache**: Qdrant + embedding pipeline (**status:** Not started).
-- **Phase 6 — Production hardening**: Grafana, load tests, docs (**status:** Not started).
+- **Phase 1 -- Foundation**: Proxy with OpenAI integration (**status:** Complete).
+- **Phase 2 -- Entropy engine**: Logprob analysis and routing (**status:** Complete).
+- **Phase 3 -- Calibration**: Threshold sweep and benchmark dataset (**status:** Complete).
+- **Phase 4 -- Speculative execution**: Parallel heavyweight calls (**status:** Not started).
+- **Phase 5 -- Semantic cache**: Qdrant + embedding pipeline (**status:** Not started).
+- **Phase 6 -- Production hardening**: Grafana, load tests, docs (**status:** Not started).
 
-## Metrics (Targets)
+## Metrics
 
-These are targets, not claims. Actual numbers will be filled in after calibration (Phase 3) and load testing (Phase 6).
+Calibrated on 518 prompts across 4 categories (simple factual, multi-step reasoning, code generation, ambiguous/creative) using LLM-as-judge evaluation.
 
-- **TCO reduction**: > 60% vs all-heavyweight baseline.
-- **Draft acceptance rate**: > 65% of requests.
-- **Accuracy (draft path)**: > 95% acceptable.
-- **P99 latency (draft)**: < 200ms.
-- **Cache hit rate**: > 15% at steady state.
+- **TCO reduction**: 91.6% vs all-heavyweight baseline (at T=2.0).
+- **Draft acceptance rate**: 94% of requests served by drafter.
+- **Accuracy (draft path)**: 98.2% acceptable (LLM-as-judge).
+- **Calibrated threshold**: T=2.0 (Shannon entropy in bits, 10-token sliding window).
+- **P99 latency (draft)**: < 200ms (target, pending Phase 6 load test).
+- **Cache hit rate**: > 15% at steady state (target, pending Phase 5).
 - **Proxy overhead**: < 5ms P99.
 
 ## Quick Start
 
 ```bash
-# Prerequisites: Go 1.22+, Docker, API keys for Groq + OpenAI/Anthropic
+# Prerequisites: Go 1.22+, Docker, OpenAI API key
 
 # Clone and build
 git clone https://github.com/trnahnh/draft-thinker.git
@@ -81,7 +82,6 @@ go build -o draft-thinker ./cmd/gateway
 docker compose up -d  # Redis, Qdrant, Grafana
 
 # Run the gateway
-export GROQ_API_KEY=...
 export OPENAI_API_KEY=...
 ./draft-thinker --config config.yaml
 

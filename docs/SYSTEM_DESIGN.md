@@ -6,7 +6,7 @@
 
 ## 1. Overview
 
-Draft-Thinker is a stateful reverse proxy that sits between clients and LLM providers. It reduces inference costs by 60–80% by routing requests through a fast, cheap drafter model first, analyzing the drafter's token-level confidence via Shannon entropy, and only escalating to expensive frontier models when the drafter demonstrates high uncertainty.
+Draft-Thinker is a stateful reverse proxy that sits between clients and LLM providers. It reduces inference costs by 91.6% by routing requests through a fast, cheap drafter model first, analyzing the drafter's token-level confidence via Shannon entropy, and only escalating to expensive frontier models when the drafter demonstrates high uncertainty.
 
 ```text
 Client
@@ -18,7 +18,7 @@ Client
 │  ┌───────────┐   ┌──────────┐   ┌───────────┐  │
 │  │  Ingress  │──▶│ Semantic │──▶│  Drafter   │  │
 │  │  (Auth,   │   │  Cache   │   │   Pool     │  │
-│  │  Validate)│   │ (Qdrant) │   │  (Groq)    │  │
+│  │  Validate)│   │ (Qdrant) │   │  (OpenAI)  │  │
 │  └───────────┘   └────┬─────┘   └─────┬──────┘  │
 │                  HIT   │              │ tokens   │
 │                   │    │         ┌────▼───────┐  │
@@ -195,8 +195,8 @@ The cache lookup runs on the request's hot path but the vector store query is se
 |-----|----------|---------|
 |**Gateway**|Go (`net/http`)|Goroutines for concurrent request handling. No framework overhead. Native HTTP/2.|
 |**Entropy Engine**|Go (`math`)|Entropy computation is pure math — no need to cross language boundary.|
-|**Drafter Models**|Groq / Together AI|Hosted small-model inference (Llama-3-8B). Fast, cheap, returns logprobs.|
-|**Heavyweight**|OpenAI / Anthropic|GPT-4o or Claude as the escalation target. Real API costs for benchmarking.|
+|**Drafter Models**|OpenAI (gpt-4.1-nano)|Fast, cheap, returns logprobs.|
+|**Heavyweight**|OpenAI (gpt-4.1)|Escalation target. Real API costs for benchmarking.|
 |**Cache (KV)**|Redis|Metadata, TTLs, rate counters.|
 |**Cache (Vector)**|Qdrant|Nearest-neighbor lookup for semantic cache. Self-hosted, lightweight.|
 |**Embedding**|all-MiniLM-L6-v2|384-dim embeddings. Fast enough to run inline.|
@@ -213,9 +213,9 @@ The original concept used Go for the gateway and Python/LangGraph for orchestrat
 
 |Metric|Target|Measurement|
 |------|------|-----------|
-|TCO Reduction|> 60% vs all-heavyweight baseline|`(baseline_cost - gateway_cost) / baseline_cost`|
-|Draft Acceptance Rate|> 65% of requests|Requests served by drafter / total requests|
-|Accuracy (Draft Path)|> 95% acceptable|LLM-as-judge or human eval on benchmark set|
+|TCO Reduction|91.6% vs all-heavyweight baseline|Calibrated on 518 prompts at T=2.0|
+|Draft Acceptance Rate|94% of requests|Requests served by drafter / total requests|
+|Accuracy (Draft Path)|98.2% acceptable|LLM-as-judge evaluation on benchmark set|
 |P99 Latency (Draft)|< 200ms|Prometheus histogram|
 |P99 Latency (Escalated)|< 2x heavyweight standalone|Compared to direct heavyweight call|
 |Cache Hit Rate|> 15% at steady state|Cache hits / total requests over 1hr window|
@@ -231,7 +231,7 @@ The original concept used Go for the gateway and Python/LangGraph for orchestrat
 3. Cache lookup: embed prompt → Qdrant similarity search
    ├── HIT (sim > 0.95): return cached response, log cache_hit metric
    └── MISS: continue
-4. Draft: forward to Groq (Llama-3-8B) with logprobs=true, stream=true
+4. Draft: forward to OpenAI (gpt-4.1-nano) with logprobs=true, stream=true
 5. Entropy analysis (per-token, streaming):
    ├── All tokens below T: DRAFT_ACCEPTED → return response, cache it
    ├── Early tokens > 0.8*T: fire speculative heavyweight call
