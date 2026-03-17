@@ -8,8 +8,10 @@ import (
 	"time"
 
 	"github.com/trnahnh/draft-thinker/internal/config"
+	"github.com/trnahnh/draft-thinker/internal/entropy"
 	"github.com/trnahnh/draft-thinker/internal/metrics"
 	"github.com/trnahnh/draft-thinker/internal/router"
+	"github.com/trnahnh/draft-thinker/internal/speculative"
 	"github.com/trnahnh/draft-thinker/pkg/client"
 )
 
@@ -21,7 +23,19 @@ type Server struct {
 func NewServer(cfg *config.Config, drafter, heavyweight client.LLMClient, rtr *router.Router, rec metrics.Recorder) *Server {
 	mux := http.NewServeMux()
 
-	chatH := newChatHandler(drafter, heavyweight, rtr, rec, cfg.Entropy)
+	var exec *speculative.Executor
+	if cfg.Speculative.IsEnabled() {
+		exec = speculative.NewExecutor(speculative.ExecutorConfig{
+			WindowCfg: entropy.WindowConfig{
+				Size:           cfg.Entropy.WindowSize,
+				Threshold:      cfg.Entropy.Threshold,
+				EarlyExitCount: cfg.Entropy.EarlyExitCount,
+			},
+			SoftThresholdMult: cfg.Speculative.SoftThresholdMult,
+		}, heavyweight, rec)
+	}
+
+	chatH := newChatHandler(drafter, heavyweight, rtr, exec, rec, cfg.Entropy, cfg.Speculative)
 	mux.Handle("/v1/chat/completions", chatH)
 
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {

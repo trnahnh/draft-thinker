@@ -14,6 +14,7 @@ import (
 	"github.com/trnahnh/draft-thinker/internal/entropy"
 	"github.com/trnahnh/draft-thinker/internal/metrics"
 	"github.com/trnahnh/draft-thinker/internal/router"
+	"github.com/trnahnh/draft-thinker/internal/speculative"
 	"github.com/trnahnh/draft-thinker/pkg/client"
 	"github.com/trnahnh/draft-thinker/pkg/protocol"
 )
@@ -107,7 +108,29 @@ func newTestHandler(drafter, heavyweight *mockLLMClient) *chatHandler {
 		Threshold:      cfg.Threshold,
 		EarlyExitCount: cfg.EarlyExitCount,
 	}, &metrics.NoopRecorder{})
-	return newChatHandler(drafter, heavyweight, rtr, &metrics.NoopRecorder{}, cfg)
+	disabled := false
+	specCfg := config.SpeculativeConfig{Enabled: &disabled}
+	return newChatHandler(drafter, heavyweight, rtr, nil, &metrics.NoopRecorder{}, cfg, specCfg)
+}
+
+func newTestHandlerWithSpec(drafter, heavyweight *mockLLMClient) *chatHandler {
+	cfg := defaultEntropyCfg()
+	rtr := router.NewRouter(entropy.WindowConfig{
+		Size:           cfg.WindowSize,
+		Threshold:      cfg.Threshold,
+		EarlyExitCount: cfg.EarlyExitCount,
+	}, &metrics.NoopRecorder{})
+	enabled := true
+	specCfg := config.SpeculativeConfig{Enabled: &enabled, SoftThresholdMult: 0.8}
+	exec := speculative.NewExecutor(speculative.ExecutorConfig{
+		WindowCfg: entropy.WindowConfig{
+			Size:           cfg.WindowSize,
+			Threshold:      cfg.Threshold,
+			EarlyExitCount: cfg.EarlyExitCount,
+		},
+		SoftThresholdMult: specCfg.SoftThresholdMult,
+	}, heavyweight, &metrics.NoopRecorder{})
+	return newChatHandler(drafter, heavyweight, rtr, exec, &metrics.NoopRecorder{}, cfg, specCfg)
 }
 
 func TestHandler_AcceptDraft(t *testing.T) {
@@ -366,6 +389,256 @@ func TestHandler_WrongMethod(t *testing.T) {
 
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("status: got %d, want %d", w.Code, http.StatusBadRequest)
+	}
+}
+
+// midEntropyChunk generates entropy above softThreshold but below hardThreshold.
+// Probs 0.80/0.12/0.08 give Shannon entropy ~0.92 bits (> 0.8 soft, < 1.0 hard with threshold=1.0).
+func midEntropyChunk(token string) protocol.StreamChunk {
+	return protocol.StreamChunk{
+		ID: "chunk-m", Object: "chat.completion.chunk", Model: "llama3-8b-8192",
+		Choices: []protocol.Choice{
+			{
+				Index: 0,
+				Delta: &protocol.Delta{Content: token},
+				Logprobs: &protocol.ChoiceLogprobs{
+					Content: []protocol.TokenLogprob{
+						{
+							Token:   token,
+							Logprob: math.Log(0.80),
+							TopLogprobs: []protocol.TopLogprobEntry{
+								{Token: token, Logprob: math.Log(0.80)},
+								{Token: "alt1", Logprob: math.Log(0.12)},
+								{Token: "alt2", Logprob: math.Log(0.08)},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func TestHandler_SpeculativeAccept(t *testing.T) {
+	drafter := &mockLLMClient{
+		streamChunks: []protocol.StreamChunk{
+			confidentChunk("Hello"),
+			confidentChunk(" world"),
+		},
+	}
+	heavyweight := &mockLLMClient{}
+
+	handler := newTestHandlerWithSpec(drafter, heavyweight)
+
+	body := `{"model":"auto","messages":[{"role":"user","content":"2+2?"}]}`
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status: got %d, want %d", w.Code, http.StatusOK)
+	}
+
+	var resp protocol.ChatCompletionResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if resp.Choices[0].Message.Content != "Hello world" {
+		t.Errorf("content: got %q, want %q", resp.Choices[0].Message.Content, "Hello world")
+	}
+}
+
+func TestHandler_SpeculativeEscalation(t *testing.T) {
+	drafter := &mockLLMClient{
+		streamChunks: []protocol.StreamChunk{
+			midEntropyChunk("hmm"),
+			uncertainChunk("well"),
+			uncertainChunk("uh"),
+		},
+	}
+	heavyweight := &mockLLMClient{
+		completeResp: &protocol.ChatCompletionResponse{
+			ID: "hw-resp", Object: "chat.completion", Model: "gpt-4o",
+			Choices: []protocol.Choice{
+				{Index: 0, Message: &protocol.Message{Role: "assistant", Content: "Heavyweight response"}},
+			},
+		},
+		streamChunks: []protocol.StreamChunk{
+			{ID: "hw-1", Object: "chat.completion.chunk", Model: "gpt-4o",
+				Choices: []protocol.Choice{{Index: 0, Delta: &protocol.Delta{Content: "Speculative"}}}},
+			{ID: "hw-2", Object: "chat.completion.chunk", Model: "gpt-4o",
+				Choices: []protocol.Choice{{Index: 0, Delta: &protocol.Delta{Content: " heavy"}}}},
+		},
+	}
+
+	handler := newTestHandlerWithSpec(drafter, heavyweight)
+
+	body := `{"model":"auto","messages":[{"role":"user","content":"Explain CRDTs"}]}`
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status: got %d, want %d", w.Code, http.StatusOK)
+	}
+
+	var resp protocol.ChatCompletionResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if resp.Choices[0].Message.Content != "Speculative heavy" {
+		t.Errorf("content: got %q, want %q", resp.Choices[0].Message.Content, "Speculative heavy")
+	}
+}
+
+func TestHandler_SpeculativeCancellation(t *testing.T) {
+	drafter := &mockLLMClient{
+		streamChunks: []protocol.StreamChunk{
+			confidentChunk("Hello"),
+			midEntropyChunk("maybe"),
+			confidentChunk(" world"),
+			confidentChunk(" again"),
+			confidentChunk(" more"),
+			confidentChunk(" text"),
+		},
+	}
+	heavyweight := &mockLLMClient{
+		streamChunks: []protocol.StreamChunk{
+			{ID: "hw-1", Object: "chat.completion.chunk", Model: "gpt-4o",
+				Choices: []protocol.Choice{{Index: 0, Delta: &protocol.Delta{Content: "Heavy"}}}},
+		},
+	}
+
+	handler := newTestHandlerWithSpec(drafter, heavyweight)
+
+	body := `{"model":"auto","messages":[{"role":"user","content":"2+2?"}]}`
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status: got %d, want %d", w.Code, http.StatusOK)
+	}
+
+	var resp protocol.ChatCompletionResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if resp.Choices[0].Message.Content != "Hellomaybe world again more text" {
+		t.Errorf("content: got %q", resp.Choices[0].Message.Content)
+	}
+}
+
+func TestHandler_SpeculativeStreamAccept(t *testing.T) {
+	drafter := &mockLLMClient{
+		streamChunks: []protocol.StreamChunk{
+			confidentChunk("Hello"),
+			confidentChunk(" world"),
+		},
+	}
+	heavyweight := &mockLLMClient{}
+
+	handler := newTestHandlerWithSpec(drafter, heavyweight)
+
+	body := `{"model":"auto","messages":[{"role":"user","content":"Hi"}],"stream":true}`
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status: got %d, want %d", w.Code, http.StatusOK)
+	}
+	result := w.Body.String()
+	if !strings.Contains(result, "Hello") {
+		t.Error("response should contain draft content")
+	}
+	if !strings.Contains(result, "data: [DONE]") {
+		t.Error("response should end with [DONE]")
+	}
+}
+
+func TestHandler_SpeculativeStreamEscalation(t *testing.T) {
+	drafter := &mockLLMClient{
+		streamChunks: []protocol.StreamChunk{
+			midEntropyChunk("hmm"),
+			uncertainChunk("well"),
+			uncertainChunk("uh"),
+		},
+	}
+	heavyweight := &mockLLMClient{
+		streamChunks: []protocol.StreamChunk{
+			{ID: "hw-1", Object: "chat.completion.chunk", Model: "gpt-4o",
+				Choices: []protocol.Choice{{Index: 0, Delta: &protocol.Delta{Content: "Heavy"}}}},
+			{ID: "hw-2", Object: "chat.completion.chunk", Model: "gpt-4o",
+				Choices: []protocol.Choice{{Index: 0, Delta: &protocol.Delta{Content: " stream"}}}},
+		},
+	}
+
+	handler := newTestHandlerWithSpec(drafter, heavyweight)
+
+	body := `{"model":"auto","messages":[{"role":"user","content":"Explain CRDTs"}],"stream":true}`
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status: got %d, want %d", w.Code, http.StatusOK)
+	}
+	result := w.Body.String()
+	if !strings.Contains(result, "Heavy") {
+		t.Error("response should contain speculative heavyweight content")
+	}
+	if !strings.Contains(result, "data: [DONE]") {
+		t.Error("response should end with [DONE]")
+	}
+}
+
+func TestHandler_HardEscalationNoSoftThreshold(t *testing.T) {
+	drafter := &mockLLMClient{
+		streamChunks: []protocol.StreamChunk{
+			uncertainChunk("Well"),
+			uncertainChunk(","),
+			uncertainChunk(" it"),
+		},
+	}
+	heavyweight := &mockLLMClient{
+		completeResp: &protocol.ChatCompletionResponse{
+			ID: "hw-resp", Object: "chat.completion", Model: "gpt-4o",
+			Choices: []protocol.Choice{
+				{Index: 0, Message: &protocol.Message{Role: "assistant", Content: "Heavyweight response"}},
+			},
+		},
+	}
+
+	handler := newTestHandlerWithSpec(drafter, heavyweight)
+
+	body := `{"model":"auto","messages":[{"role":"user","content":"Explain CRDTs"}]}`
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status: got %d, want %d", w.Code, http.StatusOK)
+	}
+
+	var resp protocol.ChatCompletionResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if resp.Model != "gpt-4o" {
+		t.Errorf("model: got %q, want heavyweight model", resp.Model)
 	}
 }
 
