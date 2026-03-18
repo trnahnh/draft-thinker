@@ -19,6 +19,9 @@ type PrometheusRecorder struct {
 	speculativeTriggersTotal    prometheus.Counter
 	speculativeCancelsTotal     prometheus.Counter
 	speculativeLatencySaved     prometheus.Histogram
+	cacheHitsTotal              prometheus.Counter
+	cacheMissesTotal            prometheus.Counter
+	cacheLookupLatency          prometheus.Histogram
 }
 
 func NewPrometheusRecorder() *PrometheusRecorder {
@@ -75,19 +78,41 @@ func NewPrometheusRecorder() *PrometheusRecorder {
 		Buckets:   []float64{0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30},
 	})
 
+	cacheHits := prometheus.NewCounter(prometheus.CounterOpts{
+		Namespace: "draftthinker",
+		Name:      "cache_hits_total",
+		Help:      "Total number of cache hits.",
+	})
+
+	cacheMisses := prometheus.NewCounter(prometheus.CounterOpts{
+		Namespace: "draftthinker",
+		Name:      "cache_misses_total",
+		Help:      "Total number of cache misses.",
+	})
+
+	cacheLookup := prometheus.NewHistogram(prometheus.HistogramOpts{
+		Namespace: "draftthinker",
+		Name:      "cache_lookup_latency_seconds",
+		Help:      "Cache lookup latency in seconds.",
+		Buckets:   []float64{0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5},
+	})
+
 	reg.MustRegister(requests, latency, errors, entropyDist, routingDecisions,
-		specTriggers, specCancels, specLatency)
+		specTriggers, specCancels, specLatency, cacheHits, cacheMisses, cacheLookup)
 
 	return &PrometheusRecorder{
-		registry:                reg,
-		requestsTotal:           requests,
-		upstreamLatency:         latency,
-		errorsTotal:             errors,
-		entropyDistribution:     entropyDist,
-		routingDecisionsTotal:   routingDecisions,
-		speculativeTriggersTotal: specTriggers,
-		speculativeCancelsTotal: specCancels,
-		speculativeLatencySaved: specLatency,
+		registry:                    reg,
+		requestsTotal:               requests,
+		upstreamLatency:             latency,
+		errorsTotal:                 errors,
+		entropyDistribution:         entropyDist,
+		routingDecisionsTotal:       routingDecisions,
+		speculativeTriggersTotal:    specTriggers,
+		speculativeCancelsTotal:     specCancels,
+		speculativeLatencySaved:     specLatency,
+		cacheHitsTotal:              cacheHits,
+		cacheMissesTotal:            cacheMisses,
+		cacheLookupLatency:          cacheLookup,
 	}
 }
 
@@ -121,6 +146,18 @@ func (p *PrometheusRecorder) RecordSpeculativeCancellation() {
 
 func (p *PrometheusRecorder) RecordSpeculativeLatencySaved(d time.Duration) {
 	p.speculativeLatencySaved.Observe(d.Seconds())
+}
+
+func (p *PrometheusRecorder) RecordCacheHit() {
+	p.cacheHitsTotal.Inc()
+}
+
+func (p *PrometheusRecorder) RecordCacheMiss() {
+	p.cacheMissesTotal.Inc()
+}
+
+func (p *PrometheusRecorder) RecordCacheLookupLatency(d time.Duration) {
+	p.cacheLookupLatency.Observe(d.Seconds())
 }
 
 func (p *PrometheusRecorder) Handler() http.Handler {

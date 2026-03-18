@@ -11,4 +11,7 @@ type Recorder interface {
 	RecordSpeculativeTrigger()
 	RecordSpeculativeCancellation()
 	RecordSpeculativeLatencySaved(duration time.Duration)
+	RecordCacheHit()
+	RecordCacheMiss()
+	RecordCacheLookupLatency(duration time.Duration)
 }
