@@ -114,7 +114,6 @@ npm run dev
 - [System Design](docs/SYSTEM_DESIGN.md) -- architecture, entropy algorithm, speculative execution, cache design
 - [Development Phases](docs/PHASES.md) -- deliverables, exit criteria, and timeline per phase
 - [Metrics](docs/METRICS.md) -- metrics exposed by the gateway at the configured metrics path
-- [Resume Bullets](docs/RESUME.md) -- interview-ready project summary with measured data
 
 ## Inspired By
 
