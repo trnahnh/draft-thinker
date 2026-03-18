@@ -236,3 +236,84 @@ entropy:
 		t.Fatal("expected error for window_size < 1")
 	}
 }
+
+func TestLoad_CacheDefaults(t *testing.T) {
+	path := writeTestConfig(t, `{}`)
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if cfg.Cache.IsEnabled() {
+		t.Error("cache should be disabled by default")
+	}
+	if cfg.Cache.Enabled != nil {
+		t.Error("cache.enabled should be nil (unset)")
+	}
+	if cfg.Cache.SimilarityThreshold != 0.95 {
+		t.Errorf("default similarity_threshold: got %f, want 0.95", cfg.Cache.SimilarityThreshold)
+	}
+	if cfg.Cache.TTLSeconds != 3600 {
+		t.Errorf("default ttl_seconds: got %d, want 3600", cfg.Cache.TTLSeconds)
+	}
+	if cfg.Cache.EmbeddingModel != "text-embedding-3-small" {
+		t.Errorf("default embedding_model: got %q", cfg.Cache.EmbeddingModel)
+	}
+	if cfg.Cache.EmbeddingDimensions != 1536 {
+		t.Errorf("default embedding_dimensions: got %d, want 1536", cfg.Cache.EmbeddingDimensions)
+	}
+	if cfg.Cache.QdrantCollection != "draftthinker_cache" {
+		t.Errorf("default qdrant_collection: got %q", cfg.Cache.QdrantCollection)
+	}
+}
+
+func TestLoad_CacheEnabled(t *testing.T) {
+	path := writeTestConfig(t, `
+cache:
+  enabled: true
+  similarity_threshold: 0.90
+  ttl_seconds: 7200
+`)
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !cfg.Cache.IsEnabled() {
+		t.Error("cache should be enabled")
+	}
+	if cfg.Cache.SimilarityThreshold != 0.90 {
+		t.Errorf("similarity_threshold: got %f, want 0.90", cfg.Cache.SimilarityThreshold)
+	}
+	if cfg.Cache.TTLSeconds != 7200 {
+		t.Errorf("ttl_seconds: got %d, want 7200", cfg.Cache.TTLSeconds)
+	}
+}
+
+func TestLoad_CacheInvalidThreshold(t *testing.T) {
+	path := writeTestConfig(t, `
+cache:
+  enabled: true
+  similarity_threshold: 1.5
+`)
+
+	_, err := Load(path)
+	if err == nil {
+		t.Fatal("expected error for similarity_threshold > 1.0")
+	}
+}
+
+func TestLoad_CacheInvalidTTL(t *testing.T) {
+	path := writeTestConfig(t, `
+cache:
+  enabled: true
+  ttl_seconds: -1
+`)
+
+	_, err := Load(path)
+	if err == nil {
+		t.Fatal("expected error for negative ttl_seconds")
+	}
+}

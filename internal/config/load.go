@@ -62,6 +62,21 @@ func applyDefaults(cfg *Config) {
 	if cfg.Metrics.Path == "" {
 		cfg.Metrics.Path = "/metrics"
 	}
+	if cfg.Cache.SimilarityThreshold == 0 {
+		cfg.Cache.SimilarityThreshold = 0.95
+	}
+	if cfg.Cache.TTLSeconds == 0 {
+		cfg.Cache.TTLSeconds = 3600
+	}
+	if cfg.Cache.EmbeddingModel == "" {
+		cfg.Cache.EmbeddingModel = "text-embedding-3-small"
+	}
+	if cfg.Cache.EmbeddingDimensions == 0 {
+		cfg.Cache.EmbeddingDimensions = 1536
+	}
+	if cfg.Cache.QdrantCollection == "" {
+		cfg.Cache.QdrantCollection = "draftthinker_cache"
+	}
 }
 
 func validate(cfg *Config) error {
@@ -85,6 +100,17 @@ func validate(cfg *Config) error {
 	}
 	if cfg.Speculative.SoftThresholdMult <= 0 || cfg.Speculative.SoftThresholdMult >= 1.0 {
 		return fmt.Errorf("speculative.soft_threshold_mult must be > 0 and < 1.0, got %f", cfg.Speculative.SoftThresholdMult)
+	}
+	if cfg.Cache.IsEnabled() {
+		if cfg.Cache.SimilarityThreshold <= 0 || cfg.Cache.SimilarityThreshold > 1.0 {
+			return fmt.Errorf("cache.similarity_threshold must be > 0 and <= 1.0, got %f", cfg.Cache.SimilarityThreshold)
+		}
+		if cfg.Cache.TTLSeconds <= 0 {
+			return fmt.Errorf("cache.ttl_seconds must be > 0, got %d", cfg.Cache.TTLSeconds)
+		}
+		if cfg.Cache.EmbeddingDimensions <= 0 {
+			return fmt.Errorf("cache.embedding_dimensions must be > 0, got %d", cfg.Cache.EmbeddingDimensions)
+		}
 	}
 	return nil
 }

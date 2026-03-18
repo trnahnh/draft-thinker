@@ -26,6 +26,14 @@ speculative:
   enabled: true
   soft_threshold_mult: 0.8
 
+cache:
+  enabled: true
+  similarity_threshold: 0.95
+  ttl_seconds: 3600
+  embedding_model: text-embedding-3-small
+  embedding_dimensions: 1536
+  qdrant_collection: draftthinker_cache
+
 metrics:
   enabled: true
   path: /metrics

@@ -6,7 +6,24 @@ type Config struct {
 	Heavyweight HeavyweightConfig `yaml:"heavyweight"`
 	Entropy     EntropyConfig     `yaml:"entropy"`
 	Speculative SpeculativeConfig `yaml:"speculative"`
+	Cache       CacheConfig       `yaml:"cache"`
 	Metrics     MetricsConfig     `yaml:"metrics"`
+}
+
+type CacheConfig struct {
+	Enabled             *bool   `yaml:"enabled"`
+	SimilarityThreshold float64 `yaml:"similarity_threshold"`
+	TTLSeconds          int     `yaml:"ttl_seconds"`
+	EmbeddingModel      string  `yaml:"embedding_model"`
+	EmbeddingDimensions int     `yaml:"embedding_dimensions"`
+	QdrantCollection    string  `yaml:"qdrant_collection"`
+}
+
+func (c CacheConfig) IsEnabled() bool {
+	if c.Enabled == nil {
+		return false
+	}
+	return *c.Enabled
 }
 
 type SpeculativeConfig struct {
