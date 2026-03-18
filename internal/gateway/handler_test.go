@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"math"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
+	"github.com/trnahnh/draft-thinker/internal/cache"
 	"github.com/trnahnh/draft-thinker/internal/config"
 	"github.com/trnahnh/draft-thinker/internal/entropy"
 	"github.com/trnahnh/draft-thinker/internal/metrics"
@@ -110,7 +112,7 @@ func newTestHandler(drafter, heavyweight *mockLLMClient) *chatHandler {
 	}, &metrics.NoopRecorder{})
 	disabled := false
 	specCfg := config.SpeculativeConfig{Enabled: &disabled}
-	return newChatHandler(drafter, heavyweight, rtr, nil, &metrics.NoopRecorder{}, cfg, specCfg)
+	return newChatHandler(drafter, heavyweight, rtr, nil, &metrics.NoopRecorder{}, cfg, specCfg, nil)
 }
 
 func newTestHandlerWithSpec(drafter, heavyweight *mockLLMClient) *chatHandler {
@@ -130,7 +132,19 @@ func newTestHandlerWithSpec(drafter, heavyweight *mockLLMClient) *chatHandler {
 		},
 		SoftThresholdMult: specCfg.SoftThresholdMult,
 	}, heavyweight, &metrics.NoopRecorder{})
-	return newChatHandler(drafter, heavyweight, rtr, exec, &metrics.NoopRecorder{}, cfg, specCfg)
+	return newChatHandler(drafter, heavyweight, rtr, exec, &metrics.NoopRecorder{}, cfg, specCfg, nil)
+}
+
+func newTestHandlerWithCache(drafter, heavyweight *mockLLMClient, cs cache.Store) *chatHandler {
+	cfg := defaultEntropyCfg()
+	rtr := router.NewRouter(entropy.WindowConfig{
+		Size:           cfg.WindowSize,
+		Threshold:      cfg.Threshold,
+		EarlyExitCount: cfg.EarlyExitCount,
+	}, &metrics.NoopRecorder{})
+	disabled := false
+	specCfg := config.SpeculativeConfig{Enabled: &disabled}
+	return newChatHandler(drafter, heavyweight, rtr, nil, &metrics.NoopRecorder{}, cfg, specCfg, cs)
 }
 
 func TestHandler_AcceptDraft(t *testing.T) {
@@ -658,5 +672,173 @@ func TestHandler_UpstreamTimeout(t *testing.T) {
 
 	if w.Code != http.StatusGatewayTimeout {
 		t.Fatalf("status: got %d, want %d", w.Code, http.StatusGatewayTimeout)
+	}
+}
+
+type mockCacheStore struct {
+	lookupResp *protocol.ChatCompletionResponse
+	lookupErr  error
+	inserted   bool
+	insertErr  error
+	evicted    bool
+	evictErr   error
+}
+
+func (m *mockCacheStore) Lookup(_ context.Context, _ []protocol.Message) (*protocol.ChatCompletionResponse, error) {
+	return m.lookupResp, m.lookupErr
+}
+
+func (m *mockCacheStore) Insert(_ context.Context, _ []protocol.Message, _ *protocol.ChatCompletionResponse) error {
+	m.inserted = true
+	return m.insertErr
+}
+
+func (m *mockCacheStore) Evict(_ context.Context, _ string) error {
+	m.evicted = true
+	return m.evictErr
+}
+
+func TestHandler_CacheHit(t *testing.T) {
+	cachedResp := &protocol.ChatCompletionResponse{
+		ID: "cached-1", Object: "chat.completion", Model: "gpt-4.1-nano",
+		Choices: []protocol.Choice{
+			{Index: 0, Message: &protocol.Message{Role: "assistant", Content: "cached answer"}},
+		},
+	}
+	cs := &mockCacheStore{lookupResp: cachedResp}
+	handler := newTestHandlerWithCache(&mockLLMClient{}, &mockLLMClient{}, cs)
+
+	body := `{"model":"auto","messages":[{"role":"user","content":"2+2?"}]}`
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status: got %d, want %d", w.Code, http.StatusOK)
+	}
+
+	var resp protocol.ChatCompletionResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if resp.Choices[0].Message.Content != "cached answer" {
+		t.Errorf("content: got %q, want %q", resp.Choices[0].Message.Content, "cached answer")
+	}
+}
+
+func TestHandler_CacheHitStream(t *testing.T) {
+	cachedResp := &protocol.ChatCompletionResponse{
+		ID: "cached-1", Object: "chat.completion", Model: "gpt-4.1-nano",
+		Choices: []protocol.Choice{
+			{Index: 0, Message: &protocol.Message{Role: "assistant", Content: "cached stream"}},
+		},
+	}
+	cs := &mockCacheStore{lookupResp: cachedResp}
+	handler := newTestHandlerWithCache(&mockLLMClient{}, &mockLLMClient{}, cs)
+
+	body := `{"model":"auto","messages":[{"role":"user","content":"Hi"}],"stream":true}`
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status: got %d, want %d", w.Code, http.StatusOK)
+	}
+
+	result := w.Body.String()
+	if !strings.Contains(result, "cached stream") {
+		t.Error("response should contain cached content")
+	}
+	if !strings.Contains(result, "data: [DONE]") {
+		t.Error("response should end with [DONE]")
+	}
+}
+
+func TestHandler_CacheMiss(t *testing.T) {
+	cs := &mockCacheStore{lookupResp: nil}
+	drafter := &mockLLMClient{
+		streamChunks: []protocol.StreamChunk{
+			confidentChunk("Hello"),
+			confidentChunk(" world"),
+		},
+	}
+	handler := newTestHandlerWithCache(drafter, &mockLLMClient{}, cs)
+
+	body := `{"model":"auto","messages":[{"role":"user","content":"2+2?"}]}`
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status: got %d, want %d", w.Code, http.StatusOK)
+	}
+
+	var resp protocol.ChatCompletionResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if resp.Choices[0].Message.Content != "Hello world" {
+		t.Errorf("content: got %q, want draft content", resp.Choices[0].Message.Content)
+	}
+}
+
+func TestHandler_CacheError(t *testing.T) {
+	cs := &mockCacheStore{lookupErr: fmt.Errorf("cache unavailable")}
+	drafter := &mockLLMClient{
+		streamChunks: []protocol.StreamChunk{
+			confidentChunk("Hello"),
+		},
+	}
+	handler := newTestHandlerWithCache(drafter, &mockLLMClient{}, cs)
+
+	body := `{"model":"auto","messages":[{"role":"user","content":"Hi"}]}`
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status: got %d, want %d (should fall through on cache error)", w.Code, http.StatusOK)
+	}
+}
+
+func TestHandler_NoCacheInsertOnEscalate(t *testing.T) {
+	cs := &mockCacheStore{lookupResp: nil}
+	drafter := &mockLLMClient{
+		streamChunks: []protocol.StreamChunk{
+			uncertainChunk("Well"),
+			uncertainChunk(","),
+			uncertainChunk(" it"),
+		},
+	}
+	heavyweight := &mockLLMClient{
+		completeResp: &protocol.ChatCompletionResponse{
+			ID: "hw-resp", Object: "chat.completion", Model: "gpt-4o",
+			Choices: []protocol.Choice{
+				{Index: 0, Message: &protocol.Message{Role: "assistant", Content: "Heavyweight response"}},
+			},
+		},
+	}
+	handler := newTestHandlerWithCache(drafter, heavyweight, cs)
+
+	body := `{"model":"auto","messages":[{"role":"user","content":"Explain CRDTs"}]}`
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status: got %d, want %d", w.Code, http.StatusOK)
+	}
+	if cs.inserted {
+		t.Error("cache insert should not be called on escalated responses")
 	}
 }

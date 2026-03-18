@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/trnahnh/draft-thinker/internal/cache"
 	"github.com/trnahnh/draft-thinker/internal/config"
 	"github.com/trnahnh/draft-thinker/internal/entropy"
 	"github.com/trnahnh/draft-thinker/internal/metrics"
@@ -20,7 +21,7 @@ type Server struct {
 	cfg        *config.Config
 }
 
-func NewServer(cfg *config.Config, drafter, heavyweight client.LLMClient, rtr *router.Router, rec metrics.Recorder) *Server {
+func NewServer(cfg *config.Config, drafter, heavyweight client.LLMClient, rtr *router.Router, rec metrics.Recorder, cacheStore cache.Store) *Server {
 	mux := http.NewServeMux()
 
 	var exec *speculative.Executor
@@ -35,8 +36,12 @@ func NewServer(cfg *config.Config, drafter, heavyweight client.LLMClient, rtr *r
 		}, heavyweight, rec)
 	}
 
-	chatH := newChatHandler(drafter, heavyweight, rtr, exec, rec, cfg.Entropy, cfg.Speculative)
+	chatH := newChatHandler(drafter, heavyweight, rtr, exec, rec, cfg.Entropy, cfg.Speculative, cacheStore)
 	mux.Handle("/v1/chat/completions", chatH)
+
+	if cacheStore != nil {
+		mux.Handle("/v1/cache/", newCacheEvictHandler(cacheStore))
+	}
 
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)

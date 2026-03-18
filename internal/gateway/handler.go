@@ -1,12 +1,14 @@
 package gateway
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"time"
 
+	"github.com/trnahnh/draft-thinker/internal/cache"
 	"github.com/trnahnh/draft-thinker/internal/config"
 	"github.com/trnahnh/draft-thinker/internal/entropy"
 	"github.com/trnahnh/draft-thinker/internal/metrics"
@@ -24,9 +26,10 @@ type chatHandler struct {
 	recorder    metrics.Recorder
 	entropyCfg  config.EntropyConfig
 	specCfg     config.SpeculativeConfig
+	cache       cache.Store
 }
 
-func newChatHandler(drafter, heavyweight client.LLMClient, rtr *router.Router, exec *speculative.Executor, rec metrics.Recorder, entropyCfg config.EntropyConfig, specCfg config.SpeculativeConfig) *chatHandler {
+func newChatHandler(drafter, heavyweight client.LLMClient, rtr *router.Router, exec *speculative.Executor, rec metrics.Recorder, entropyCfg config.EntropyConfig, specCfg config.SpeculativeConfig, cacheStore cache.Store) *chatHandler {
 	return &chatHandler{
 		drafter:     drafter,
 		heavyweight: heavyweight,
@@ -35,6 +38,7 @@ func newChatHandler(drafter, heavyweight client.LLMClient, rtr *router.Router, e
 		recorder:    rec,
 		entropyCfg:  entropyCfg,
 		specCfg:     specCfg,
+		cache:       cacheStore,
 	}
 }
 
@@ -57,6 +61,28 @@ func (h *chatHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.recorder.RecordError("invalid_request")
 		writeBadRequest(w, "messages array is required and must not be empty")
 		return
+	}
+
+	if h.cache != nil {
+		resp, err := h.cache.Lookup(r.Context(), req.Messages)
+		if err != nil {
+			log.Printf("cache lookup error: %v", err)
+		} else if resp != nil {
+			h.recorder.RecordRoutingDecision("cache_hit")
+			h.recorder.RecordRequest(resp.Model, http.StatusOK)
+			if req.Stream {
+				flusher, ok := w.(http.Flusher)
+				if !ok {
+					writeInternalError(w, "streaming not supported")
+					return
+				}
+				h.replayCachedSSE(w, flusher, resp)
+			} else {
+				w.Header().Set("Content-Type", "application/json")
+				json.NewEncoder(w).Encode(resp)
+			}
+			return
+		}
 	}
 
 	if req.Stream {
@@ -120,6 +146,7 @@ func (h *chatHandler) handleCompleteSerial(w http.ResponseWriter, r *http.Reques
 
 	h.recorder.RecordRoutingDecision("accept")
 	resp := assembleResponse(result.DraftChunks)
+	h.cacheInsert(req.Messages, resp)
 	h.recorder.RecordRequest(resp.Model, http.StatusOK)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(resp)
@@ -188,6 +215,7 @@ func (h *chatHandler) handleCompleteSpeculative(w http.ResponseWriter, r *http.R
 	default:
 		h.recorder.RecordRoutingDecision("accept")
 		resp := assembleResponse(result.DraftChunks)
+		h.cacheInsert(req.Messages, resp)
 		h.recorder.RecordRequest(resp.Model, http.StatusOK)
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(resp)
@@ -252,6 +280,8 @@ func (h *chatHandler) handleStreamSerial(w http.ResponseWriter, r *http.Request,
 	}
 
 	h.recorder.RecordRoutingDecision("accept")
+	resp := assembleResponse(result.DraftChunks)
+	h.cacheInsert(req.Messages, resp)
 	h.replayDraftSSE(w, flusher, result.DraftChunks)
 }
 
@@ -311,6 +341,8 @@ func (h *chatHandler) handleStreamSpeculative(w http.ResponseWriter, r *http.Req
 
 	default:
 		h.recorder.RecordRoutingDecision("accept")
+		resp := assembleResponse(result.DraftChunks)
+		h.cacheInsert(req.Messages, resp)
 		h.replayDraftSSE(w, flusher, result.DraftChunks)
 	}
 }
@@ -410,6 +442,56 @@ func (h *chatHandler) handleUpstreamError(w http.ResponseWriter, err error) {
 		writeInternalError(w, "internal server error")
 		log.Printf("unexpected upstream error: %v", err)
 	}
+}
+
+func (h *chatHandler) cacheInsert(messages []protocol.Message, resp *protocol.ChatCompletionResponse) {
+	if h.cache == nil {
+		return
+	}
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := h.cache.Insert(ctx, messages, resp); err != nil {
+			log.Printf("cache insert error: %v", err)
+		}
+	}()
+}
+
+func (h *chatHandler) replayCachedSSE(w http.ResponseWriter, flusher http.Flusher, resp *protocol.ChatCompletionResponse) {
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.WriteHeader(http.StatusOK)
+	flusher.Flush()
+
+	for _, choice := range resp.Choices {
+		chunk := protocol.StreamChunk{
+			ID:     resp.ID,
+			Object: "chat.completion.chunk",
+			Model:  resp.Model,
+			Choices: []protocol.Choice{
+				{
+					Index: choice.Index,
+					Delta: &protocol.Delta{
+						Role:    "assistant",
+						Content: choice.Message.Content,
+					},
+				},
+			},
+		}
+		data, err := json.Marshal(chunk)
+		if err != nil {
+			log.Printf("marshal cached chunk error: %v", err)
+			continue
+		}
+		if _, err := fmt.Fprintf(w, "data: %s\n\n", data); err != nil {
+			break
+		}
+		flusher.Flush()
+	}
+
+	fmt.Fprint(w, "data: [DONE]\n\n")
+	flusher.Flush()
 }
 
 func avgEntropy(entropies []entropy.TokenEntropy) float64 {
