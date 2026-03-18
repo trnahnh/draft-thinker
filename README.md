@@ -95,13 +95,15 @@ curl http://localhost:8080/v1/chat/completions \
 
 Research showcase site presenting calibration results, entropy analysis, and architecture.
 
+**Live:** [draft-thinker.vercel.app](https://draft-thinker.vercel.app)
+
+Run locally:
+
 ```bash
 cd web
 npm install
 npm run dev
 ```
-
-Open http://localhost:3000.
 
 ## Observability
 
