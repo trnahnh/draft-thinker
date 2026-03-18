@@ -116,6 +116,10 @@ npm run dev
 - [Metrics](docs/METRICS.md) -- metrics exposed by the gateway at the configured metrics path
 - [Resume Bullets](docs/RESUME.md) -- interview-ready project summary with measured data
 
+## Inspired By
+
+This project is inspired by the research [Draft-Thinking: Learning Efficient Reasoning in Long Chain-of-Thought LLMs](https://arxiv.org/abs/2603.00578).
+
 ## Why This Exists
 
 DraftThinker demonstrates distributed systems design, production engineering judgment, and the ability to build infrastructure that saves real money, with every claim backed by measured data.
