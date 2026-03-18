@@ -115,3 +115,33 @@ Phase 4 added speculative execution. Three new Prometheus instruments track when
 - **Trigger rate** = `speculative_triggers_total` / `requests_total`. Healthy range depends on workload; higher means more requests hit the soft threshold.
 - **Cancellation ratio** = `speculative_cancellations_total` / `speculative_triggers_total`. This is wasted compute. Target < 10% of total escalation cost.
 - **Latency saved** = the histogram shows how much head start the heavyweight got before escalation confirmed. Higher values mean more latency eliminated from the user-facing request.
+
+## Phase 5 Metrics
+
+Phase 5 added a semantic cache layer. Three new Prometheus instruments track cache effectiveness and lookup performance.
+
+|Metric|Type|Labels|Description|
+|---|---|---|---|
+|`draftthinker_cache_hits_total`|Counter|(none)|Total cache hits (semantically similar prompt found and response returned)|
+|`draftthinker_cache_misses_total`|Counter|(none)|Total cache misses (no similar prompt or expired Redis entry)|
+|`draftthinker_cache_lookup_latency_seconds`|Histogram|(none)|End-to-end cache lookup latency including embedding and vector search|
+
+### Cache Lookup Latency Histogram Buckets
+
+`cache_lookup_latency_seconds` uses the following bucket boundaries (in seconds):
+
+```text
+0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5
+```
+
+### Routing Decision Labels
+
+Phase 5 adds a new `decision` label value to `routing_decisions_total`:
+
+- `cache_hit`: response served from semantic cache (skips entire draft pipeline)
+
+### Interpreting Cache Metrics
+
+- **Hit rate** = `cache_hits_total` / (`cache_hits_total` + `cache_misses_total`). Higher means more requests skip the draft pipeline entirely.
+- **Lookup latency** = dominated by the embedding API call. Target < 50ms for the full lookup (embed + vector search + Redis get).
+- **Cache miss with lazy cleanup** = a vector match was found in Qdrant but the Redis TTL had expired. The orphaned Qdrant point is deleted. Logged as "cache: lazy cleanup of orphaned qdrant point".

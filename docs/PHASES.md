@@ -86,18 +86,22 @@ Escalated requests show measurably lower P99 latency compared to Phase 2's seria
 
 ---
 
-## Phase 5 -- Semantic Cache (Week 7)
+## Phase 5 -- Semantic Cache (Week 7) [COMPLETE]
 
 **Goal:** Cache verified responses to skip the draft-verify cycle on repeated reasoning patterns.
 
 ### Phase 5 deliverables
 
-- Prompt embedding pipeline (all-MiniLM-L6-v2, running locally or via API)
-- Qdrant integration for vector similarity search
-- Cache insertion on verified draft responses
-- Cache lookup on request ingress (before drafting)
-- TTL-based expiration and manual eviction API
-- Metrics: cache hit rate, latency on cache hits vs. draft path
+- Prompt embedding via OpenAI text-embedding-3-small (1536-dim, hosted -- consistent with project philosophy)
+- Qdrant integration for vector similarity search (raw HTTP, 3 endpoints)
+- Redis via go-redis/v9 for response storage with TTL
+- Cache insertion on verified draft-accepted responses only (escalated responses are not cached)
+- Cache lookup on request ingress (before drafting), supports both JSON and SSE responses
+- Conservative similarity threshold (cosine > 0.95) -- better to miss cache than return wrong answer
+- TTL-based expiration with lazy cleanup of orphaned Qdrant points
+- Manual eviction API: DELETE /v1/cache/{id}
+- Cache disabled by default (*bool nil = false), requires Redis + Qdrant infrastructure
+- Metrics: cache hit rate, cache miss rate, lookup latency histogram
 
 ### Phase 5 exit criteria
 

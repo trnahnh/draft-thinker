@@ -6,8 +6,8 @@ A cost-aware LLM gateway in Go that reduces inference costs by routing requests 
 
 LLM-powered applications send 100% of traffic to frontier models regardless of query complexity. "What are your hours?" costs the same as "Explain the tradeoffs between B-tree and LSM-tree storage engines." This is wasteful in three ways:
 
-- **Cost**: 70%+ of queries are answerable by models costing 10–50x less.
-- **Latency**: Frontier models have 2–5x higher time-to-first-token than small models.
+- **Cost**: 70%+ of queries are answerable by models costing 10-50x less.
+- **Latency**: Frontier models have 2-5x higher time-to-first-token than small models.
 - **Scale**: At high throughput, frontier model rate limits become the bottleneck, not your application.
 
 The hard part isn't routing -- it's knowing *when* the cheap model is good enough without already having the right answer. Prompt classifiers ("is this question easy?") fail on distribution shift. A syntactically simple question can require complex reasoning depending on context.
@@ -32,7 +32,7 @@ The additional latency on escalated requests is `heavyweight_total - drafter_abo
 
 ### Semantic Cache
 
-Previously verified prompt-response pairs are cached via embedding similarity (all-MiniLM-L6-v2 + Qdrant). If an incoming prompt is semantically similar (cosine > 0.95) to a cached entry, the response is returned directly, bypassing the entire draft-verify cycle.
+Previously verified prompt-response pairs are cached via embedding similarity (OpenAI text-embedding-3-small + Qdrant). If an incoming prompt is semantically similar (cosine > 0.95) to a cached entry, the response is returned directly, bypassing the entire draft-verify cycle. Only draft-accepted responses are cached -- escalated responses indicate drafter uncertainty and are not safe to cache.
 
 ## Tech Stack
 
@@ -52,8 +52,8 @@ No Python in the hot path. The draft-verify state machine is a Go switch stateme
 - **Phase 1 -- Foundation**: Proxy with OpenAI integration (**status:** Complete).
 - **Phase 2 -- Entropy engine**: Logprob analysis and routing (**status:** Complete).
 - **Phase 3 -- Calibration**: Threshold sweep and benchmark dataset (**status:** Complete).
-- **Phase 4 -- Speculative execution**: Parallel heavyweight calls (**status:** Not started).
-- **Phase 5 -- Semantic cache**: Qdrant + embedding pipeline (**status:** Not started).
+- **Phase 4 -- Speculative execution**: Parallel heavyweight calls (**status:** Complete).
+- **Phase 5 -- Semantic cache**: Qdrant + embedding pipeline (**status:** Complete).
 - **Phase 6 -- Production hardening**: Grafana, load tests, docs (**status:** Not started).
 
 ## Metrics
@@ -65,7 +65,7 @@ Calibrated on 518 prompts across 4 categories (simple factual, multi-step reason
 - **Accuracy (draft path)**: 98.2% acceptable (LLM-as-judge).
 - **Calibrated threshold**: T=2.0 (Shannon entropy in bits, 10-token sliding window).
 - **P99 latency (draft)**: < 200ms (target, pending Phase 6 load test).
-- **Cache hit rate**: > 15% at steady state (target, pending Phase 5).
+- **Cache hit rate**: > 15% at steady state (target, pending Phase 6 load test).
 - **Proxy overhead**: < 5ms P99.
 
 ## Quick Start
