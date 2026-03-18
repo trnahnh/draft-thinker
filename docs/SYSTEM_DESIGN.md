@@ -31,8 +31,8 @@ Client
 │              ┌────────────┐  ACCEPT   ESCALATE   │
 │              │  Response  │◀───┘    ┌────▼────┐  │
 │              │  (cached)  │         │Heavy API│  │
-│              └─────┬──────┘         │(OpenAI/ │  │
-│                    │                │Anthropic│  │
+│              └─────┬──────┘         │(OpenAI) │  │
+│                    │                │         │  │
 │                    │                └────┬────┘  │
 │                    ▼                     ▼       │
 │              ┌──────────────────────────────┐    │
@@ -162,7 +162,7 @@ Bypass the entire draft-verify cycle for previously seen reasoning patterns.
 Request arrives
   │
   ▼
-Embed prompt (all-MiniLM-L6-v2, 384-dim)
+Embed prompt (text-embedding-3-small, 1536-dim)
   │
   ▼
 Qdrant nearest-neighbor lookup
@@ -176,7 +176,7 @@ Qdrant nearest-neighbor lookup
 
 |Decision|Choice|Rationale|
 |--------|------|---------|
-|**Embedding model**|all-MiniLM-L6-v2|384-dim, fast enough to run inline without meaningful latency|
+|**Embedding model**|text-embedding-3-small|1536-dim via OpenAI API, consistent with hosted model philosophy|
 |**Similarity threshold**|0.95|Intentionally conservative to avoid stale/drifted answers|
 |**Vector store**|Qdrant|Self-hosted, lightweight, purpose-built for nearest-neighbor|
 |**Metadata store**|Redis|TTLs, eviction tracking, rate counters|
@@ -199,7 +199,7 @@ The cache lookup runs on the request's hot path but the vector store query is se
 |**Heavyweight**|OpenAI (gpt-4.1)|Escalation target. Real API costs for benchmarking.|
 |**Cache (KV)**|Redis|Metadata, TTLs, rate counters.|
 |**Cache (Vector)**|Qdrant|Nearest-neighbor lookup for semantic cache. Self-hosted, lightweight.|
-|**Embedding**|all-MiniLM-L6-v2|384-dim embeddings. Fast enough to run inline.|
+|**Embedding**|OpenAI text-embedding-3-small|1536-dim embeddings via API. Consistent with hosted model philosophy.|
 |**Observability**|Prometheus + Grafana|Custom metrics: cost/request, entropy distributions, cache hit rate, escalation %.|
 |**Deployment**|Docker Compose|Single-command local dev. Compose handles gateway, Redis, Qdrant, Grafana.|
 

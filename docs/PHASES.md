@@ -109,21 +109,21 @@ Repeated or semantically similar queries return cached responses with **< 50ms l
 
 ---
 
-## Phase 6 -- Production Hardening & Documentation (Week 8)
+## Phase 6 -- Production Hardening & Documentation (Week 8) [COMPLETE]
 
 **Goal:** Make the project interview-ready and publicly presentable.
 
 ### Phase 6 deliverables
 
-- **Grafana dashboard:** cost savings, entropy distributions, cache hit rate, latency percentiles, escalation breakdown
-- **Load testing** with k6 or vegeta: measure throughput and latency under concurrency
-- **README** with architecture diagram, setup instructions, and benchmark results
-- **Technical writeup** explaining the entropy-based routing approach
-- **Resume bullets** backed by measured data
+- **Grafana dashboard:** 12-panel dashboard auto-provisioned via Docker Compose. Covers request rate, draft acceptance rate, cost reduction, cache hit rate, latency percentiles (upstream, cache lookup, speculative saved), routing decisions over time, error rate, entropy distribution heatmap, speculative trigger/cancellation rates.
+- **Load testing** with vegeta: mock OpenAI SSE server for throughput testing (confident, mixed, cache scenarios). Measures P50/P95/P99 latency, throughput, and error rate under configurable concurrency.
+- **README** updated with observability section, architecture references, and benchmark results.
+- **Technical writeup:** SYSTEM_DESIGN.md updated with correct embedding model (text-embedding-3-small) and current architecture.
+- **Resume bullets** in docs/RESUME.md with measured data and interview talking points.
 
 ### Phase 6 exit criteria
 
-The project is deployed, documented, and you can walk an interviewer through every design decision with supporting data.
+The project is deployed, documented, and you can walk an interviewer through every design decision with supporting data. `docker compose up -d` provisions the full stack including Grafana dashboard automatically.
 
 ---
 
