@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/trnahnh/draft-thinker/internal/cache"
 	"github.com/trnahnh/draft-thinker/internal/config"
 	"github.com/trnahnh/draft-thinker/internal/entropy"
 	"github.com/trnahnh/draft-thinker/internal/gateway"
@@ -60,7 +61,36 @@ func main() {
 		EarlyExitCount: cfg.Entropy.EarlyExitCount,
 	}, rec)
 
-	srv := gateway.NewServer(cfg, drafter, heavyweight, rtr, rec)
+	var cacheStore cache.Store
+	if cfg.Cache.IsEnabled() {
+		redisURL := os.Getenv("REDIS_URL")
+		if redisURL == "" {
+			redisURL = "localhost:6379"
+		}
+		qdrantURL := os.Getenv("QDRANT_URL")
+		if qdrantURL == "" {
+			qdrantURL = "http://localhost:6333"
+		}
+
+		cacheStore, err = cache.New(
+			cfg.Drafter.BaseURL,
+			openaiKey,
+			cfg.Cache.EmbeddingModel,
+			cfg.Cache.EmbeddingDimensions,
+			qdrantURL,
+			cfg.Cache.QdrantCollection,
+			redisURL,
+			cfg.Cache.TTLSeconds,
+			cfg.Cache.SimilarityThreshold,
+			rec,
+		)
+		if err != nil {
+			log.Fatalf("initializing cache: %v", err)
+		}
+		log.Printf("semantic cache enabled (threshold=%.2f, ttl=%ds)", cfg.Cache.SimilarityThreshold, cfg.Cache.TTLSeconds)
+	}
+
+	srv := gateway.NewServer(cfg, drafter, heavyweight, rtr, rec, cacheStore)
 
 	errCh := make(chan error, 1)
 	go func() {
