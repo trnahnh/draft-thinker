@@ -32,3 +32,6 @@ go.work.sum
 # .vscode/
 
 CLAUDE.md
+
+benchmarks/results/*.jsonl
+benchmarks/results/*.csv

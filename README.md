@@ -95,6 +95,7 @@ curl http://localhost:8080/v1/chat/completions \
 
 - [System Design](docs/SYSTEM_DESIGN.md) -- architecture, entropy algorithm, speculative execution, cache design
 - [Development Phases](docs/PHASES.md) -- deliverables, exit criteria, and timeline per phase
+- [Metrics](docs/METRICS.md) -- metrics exposed by the gateway at the configured metrics path
 
 ## Why This Exists
 
