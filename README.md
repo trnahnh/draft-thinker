@@ -54,7 +54,7 @@ No Python in the hot path. The draft-verify state machine is a Go switch stateme
 - **Phase 3 -- Calibration**: Threshold sweep and benchmark dataset (**status:** Complete).
 - **Phase 4 -- Speculative execution**: Parallel heavyweight calls (**status:** Complete).
 - **Phase 5 -- Semantic cache**: Qdrant + embedding pipeline (**status:** Complete).
-- **Phase 6 -- Production hardening**: Grafana, load tests, docs (**status:** Not started).
+- **Phase 6 -- Production hardening**: Grafana, load tests, docs (**status:** Complete).
 
 ## Metrics
 
@@ -64,8 +64,8 @@ Calibrated on 518 prompts across 4 categories (simple factual, multi-step reason
 - **Draft acceptance rate**: 94% of requests served by drafter.
 - **Accuracy (draft path)**: 98.2% acceptable (LLM-as-judge).
 - **Calibrated threshold**: T=2.0 (Shannon entropy in bits, 10-token sliding window).
-- **P99 latency (draft)**: < 200ms (target, pending Phase 6 load test).
-- **Cache hit rate**: > 15% at steady state (target, pending Phase 6 load test).
+- **P99 latency (draft)**: 109ms at 50 req/s (vegeta, mock upstream, 100% success).
+- **Cache hit rate**: workload-dependent (repeated queries hit cache, unique queries do not).
 - **Proxy overhead**: < 5ms P99.
 
 ## Quick Start
@@ -91,11 +91,28 @@ curl http://localhost:8080/v1/chat/completions \
   -d '{"model": "auto", "messages": [{"role": "user", "content": "What is 2+2?"}]}'
 ```
 
+## Demo
+
+Research showcase site presenting calibration results, entropy analysis, and architecture.
+
+```bash
+cd web
+npm install
+npm run dev
+```
+
+Open http://localhost:3000.
+
+## Observability
+
+`docker compose up -d` auto-provisions Grafana with a pre-built dashboard at `http://localhost:3000` (admin/admin). The dashboard covers request rates, draft acceptance, latency percentiles, routing decisions, entropy distribution, cache hit rate, and speculative execution metrics. Prometheus scrapes the gateway at `/metrics` every 15 seconds.
+
 ## Documentation
 
 - [System Design](docs/SYSTEM_DESIGN.md) -- architecture, entropy algorithm, speculative execution, cache design
 - [Development Phases](docs/PHASES.md) -- deliverables, exit criteria, and timeline per phase
 - [Metrics](docs/METRICS.md) -- metrics exposed by the gateway at the configured metrics path
+- [Resume Bullets](docs/RESUME.md) -- interview-ready project summary with measured data
 
 ## Why This Exists
 

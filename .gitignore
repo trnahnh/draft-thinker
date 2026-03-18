@@ -35,3 +35,8 @@ CLAUDE.md
 
 benchmarks/results/*.jsonl
 benchmarks/results/*.csv
+
+web/node_modules/
+web/.next/
+web/.env.local
+config.loadtest.yaml
