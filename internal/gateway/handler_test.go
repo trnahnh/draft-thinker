@@ -183,6 +183,12 @@ func TestHandler_AcceptDraft(t *testing.T) {
 	if resp.Choices[0].Message.Content != "Hello world" {
 		t.Errorf("content: got %q, want %q", resp.Choices[0].Message.Content, "Hello world")
 	}
+	if got := w.Header().Get("X-Routing-Decision"); got != "accept" {
+		t.Errorf("X-Routing-Decision: got %q, want %q", got, "accept")
+	}
+	if got := w.Header().Get("X-Request-Duration-Ms"); got == "" {
+		t.Error("X-Request-Duration-Ms header missing")
+	}
 }
 
 func TestHandler_EscalateToHeavyweight(t *testing.T) {
@@ -231,6 +237,12 @@ func TestHandler_EscalateToHeavyweight(t *testing.T) {
 	}
 	if resp.Choices[0].Message.Content != "Heavyweight response" {
 		t.Errorf("content: got %q", resp.Choices[0].Message.Content)
+	}
+	if got := w.Header().Get("X-Routing-Decision"); got != "escalate" {
+		t.Errorf("X-Routing-Decision: got %q, want %q", got, "escalate")
+	}
+	if got := w.Header().Get("X-Request-Duration-Ms"); got == "" {
+		t.Error("X-Request-Duration-Ms header missing")
 	}
 }
 
@@ -725,6 +737,12 @@ func TestHandler_CacheHit(t *testing.T) {
 	}
 	if resp.Choices[0].Message.Content != "cached answer" {
 		t.Errorf("content: got %q, want %q", resp.Choices[0].Message.Content, "cached answer")
+	}
+	if got := w.Header().Get("X-Routing-Decision"); got != "cache_hit" {
+		t.Errorf("X-Routing-Decision: got %q, want %q", got, "cache_hit")
+	}
+	if got := w.Header().Get("X-Request-Duration-Ms"); got == "" {
+		t.Error("X-Request-Duration-Ms header missing")
 	}
 }
 

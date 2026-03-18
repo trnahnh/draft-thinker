@@ -43,6 +43,8 @@ func newChatHandler(drafter, heavyweight client.LLMClient, rtr *router.Router, e
 }
 
 func (h *chatHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	start := time.Now()
+
 	if r.Method != http.MethodPost {
 		writeBadRequest(w, "method not allowed, use POST")
 		return
@@ -76,8 +78,10 @@ func (h *chatHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					writeInternalError(w, "streaming not supported")
 					return
 				}
+				setRoutingHeaders(w, "cache_hit", start)
 				h.replayCachedSSE(w, flusher, resp)
 			} else {
+				setRoutingHeaders(w, "cache_hit", start)
 				w.Header().Set("Content-Type", "application/json")
 				json.NewEncoder(w).Encode(resp)
 			}
@@ -86,22 +90,21 @@ func (h *chatHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if req.Stream {
-		h.handleStream(w, r, &req)
+		h.handleStream(w, r, &req, start)
 	} else {
-		h.handleComplete(w, r, &req)
+		h.handleComplete(w, r, &req, start)
 	}
 }
 
-func (h *chatHandler) handleComplete(w http.ResponseWriter, r *http.Request, req *protocol.ChatCompletionRequest) {
+func (h *chatHandler) handleComplete(w http.ResponseWriter, r *http.Request, req *protocol.ChatCompletionRequest, start time.Time) {
 	if h.specCfg.IsEnabled() && h.executor != nil {
-		h.handleCompleteSpeculative(w, r, req)
+		h.handleCompleteSpeculative(w, r, req, start)
 		return
 	}
-	h.handleCompleteSerial(w, r, req)
+	h.handleCompleteSerial(w, r, req, start)
 }
 
-func (h *chatHandler) handleCompleteSerial(w http.ResponseWriter, r *http.Request, req *protocol.ChatCompletionRequest) {
-	start := time.Now()
+func (h *chatHandler) handleCompleteSerial(w http.ResponseWriter, r *http.Request, req *protocol.ChatCompletionRequest, start time.Time) {
 
 	drafterReq := h.cloneForDrafter(req)
 
@@ -139,6 +142,7 @@ func (h *chatHandler) handleCompleteSerial(w http.ResponseWriter, r *http.Reques
 		}
 
 		h.recorder.RecordRequest(resp.Model, http.StatusOK)
+		setRoutingHeaders(w, "escalate", start)
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(resp)
 		return
@@ -148,12 +152,12 @@ func (h *chatHandler) handleCompleteSerial(w http.ResponseWriter, r *http.Reques
 	resp := assembleResponse(result.DraftChunks)
 	h.cacheInsert(req.Messages, resp)
 	h.recorder.RecordRequest(resp.Model, http.StatusOK)
+	setRoutingHeaders(w, "accept", start)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(resp)
 }
 
-func (h *chatHandler) handleCompleteSpeculative(w http.ResponseWriter, r *http.Request, req *protocol.ChatCompletionRequest) {
-	start := time.Now()
+func (h *chatHandler) handleCompleteSpeculative(w http.ResponseWriter, r *http.Request, req *protocol.ChatCompletionRequest, start time.Time) {
 
 	drafterReq := h.cloneForDrafter(req)
 
@@ -196,6 +200,7 @@ func (h *chatHandler) handleCompleteSpeculative(w http.ResponseWriter, r *http.R
 			}
 			resp := assembleResponse(hvChunks)
 			h.recorder.RecordRequest(resp.Model, http.StatusOK)
+			setRoutingHeaders(w, "escalate", start)
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(resp)
 			return
@@ -209,6 +214,7 @@ func (h *chatHandler) handleCompleteSpeculative(w http.ResponseWriter, r *http.R
 			return
 		}
 		h.recorder.RecordRequest(resp.Model, http.StatusOK)
+		setRoutingHeaders(w, "escalate", start)
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(resp)
 
@@ -217,21 +223,21 @@ func (h *chatHandler) handleCompleteSpeculative(w http.ResponseWriter, r *http.R
 		resp := assembleResponse(result.DraftChunks)
 		h.cacheInsert(req.Messages, resp)
 		h.recorder.RecordRequest(resp.Model, http.StatusOK)
+		setRoutingHeaders(w, "accept", start)
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(resp)
 	}
 }
 
-func (h *chatHandler) handleStream(w http.ResponseWriter, r *http.Request, req *protocol.ChatCompletionRequest) {
+func (h *chatHandler) handleStream(w http.ResponseWriter, r *http.Request, req *protocol.ChatCompletionRequest, start time.Time) {
 	if h.specCfg.IsEnabled() && h.executor != nil {
-		h.handleStreamSpeculative(w, r, req)
+		h.handleStreamSpeculative(w, r, req, start)
 		return
 	}
-	h.handleStreamSerial(w, r, req)
+	h.handleStreamSerial(w, r, req, start)
 }
 
-func (h *chatHandler) handleStreamSerial(w http.ResponseWriter, r *http.Request, req *protocol.ChatCompletionRequest) {
-	start := time.Now()
+func (h *chatHandler) handleStreamSerial(w http.ResponseWriter, r *http.Request, req *protocol.ChatCompletionRequest, start time.Time) {
 
 	drafterReq := h.cloneForDrafter(req)
 
@@ -273,6 +279,7 @@ func (h *chatHandler) handleStreamSerial(w http.ResponseWriter, r *http.Request,
 			return
 		}
 
+		setRoutingHeaders(w, "escalate", start)
 		h.streamSSE(w, flusher, hvCh, func() {
 			h.recorder.RecordUpstreamLatency("heavyweight", time.Since(hvStart))
 		})
@@ -282,11 +289,11 @@ func (h *chatHandler) handleStreamSerial(w http.ResponseWriter, r *http.Request,
 	h.recorder.RecordRoutingDecision("accept")
 	resp := assembleResponse(result.DraftChunks)
 	h.cacheInsert(req.Messages, resp)
+	setRoutingHeaders(w, "accept", start)
 	h.replayDraftSSE(w, flusher, result.DraftChunks)
 }
 
-func (h *chatHandler) handleStreamSpeculative(w http.ResponseWriter, r *http.Request, req *protocol.ChatCompletionRequest) {
-	start := time.Now()
+func (h *chatHandler) handleStreamSpeculative(w http.ResponseWriter, r *http.Request, req *protocol.ChatCompletionRequest, start time.Time) {
 
 	drafterReq := h.cloneForDrafter(req)
 
@@ -324,6 +331,7 @@ func (h *chatHandler) handleStreamSpeculative(w http.ResponseWriter, r *http.Req
 
 		if result.HeavyCh != nil {
 			defer result.HeavyCancel()
+			setRoutingHeaders(w, "escalate", start)
 			h.streamSSE(w, flusher, result.HeavyCh, nil)
 			return
 		}
@@ -335,6 +343,7 @@ func (h *chatHandler) handleStreamSpeculative(w http.ResponseWriter, r *http.Req
 			h.handleUpstreamError(w, err)
 			return
 		}
+		setRoutingHeaders(w, "escalate", start)
 		h.streamSSE(w, flusher, hvCh, func() {
 			h.recorder.RecordUpstreamLatency("heavyweight", time.Since(hvStart))
 		})
@@ -343,6 +352,7 @@ func (h *chatHandler) handleStreamSpeculative(w http.ResponseWriter, r *http.Req
 		h.recorder.RecordRoutingDecision("accept")
 		resp := assembleResponse(result.DraftChunks)
 		h.cacheInsert(req.Messages, resp)
+		setRoutingHeaders(w, "accept", start)
 		h.replayDraftSSE(w, flusher, result.DraftChunks)
 	}
 }
@@ -492,6 +502,11 @@ func (h *chatHandler) replayCachedSSE(w http.ResponseWriter, flusher http.Flushe
 
 	fmt.Fprint(w, "data: [DONE]\n\n")
 	flusher.Flush()
+}
+
+func setRoutingHeaders(w http.ResponseWriter, decision string, start time.Time) {
+	w.Header().Set("X-Routing-Decision", decision)
+	w.Header().Set("X-Request-Duration-Ms", fmt.Sprintf("%d", time.Since(start).Milliseconds()))
 }
 
 func avgEntropy(entropies []entropy.TokenEntropy) float64 {
