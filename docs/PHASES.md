@@ -4,7 +4,7 @@
 
 ---
 
-## Phase 1 -- Foundation (Week 1-2) [COMPLETE]
+## Phase 1 -Foundation (Week 1-2) [COMPLETE]
 
 **Goal:** Build the basic proxy that forwards requests to a drafter model and returns responses. No routing logic yet.
 
@@ -23,7 +23,7 @@ A client can send a chat completion request to the gateway and receive a streame
 
 ---
 
-## Phase 2 -- Entropy Engine (Week 3-4) [COMPLETE]
+## Phase 2 -Entropy Engine (Week 3-4) [COMPLETE]
 
 **Goal:** Implement the entropy computation pipeline and make the first routing decisions.
 
@@ -42,7 +42,7 @@ The gateway routes requests to either the drafter or heavyweight model based on 
 
 ---
 
-## Phase 3 -- Calibration & Benchmarking (Week 5) [COMPLETE]
+## Phase 3 -Calibration & Benchmarking (Week 5) [COMPLETE]
 
 **Goal:** Empirically determine the optimal entropy threshold and produce defensible metrics.
 
@@ -60,7 +60,7 @@ The gateway routes requests to either the drafter or heavyweight model based on 
 
 ---
 
-## Phase 4 -- Speculative Execution (Week 6) [COMPLETE]
+## Phase 4 -Speculative Execution (Week 6) [COMPLETE]
 
 **Goal:** Eliminate the latency penalty on escalated requests.
 
@@ -86,18 +86,18 @@ Escalated requests show measurably lower P99 latency compared to Phase 2's seria
 
 ---
 
-## Phase 5 -- Semantic Cache (Week 7) [COMPLETE]
+## Phase 5 -Semantic Cache (Week 7) [COMPLETE]
 
 **Goal:** Cache verified responses to skip the draft-verify cycle on repeated reasoning patterns.
 
 ### Phase 5 deliverables
 
-- Prompt embedding via OpenAI text-embedding-3-small (1536-dim, hosted -- consistent with project philosophy)
+- Prompt embedding via OpenAI text-embedding-3-small (1536-dim, hosted -consistent with project philosophy)
 - Qdrant integration for vector similarity search (raw HTTP, 3 endpoints)
 - Redis via go-redis/v9 for response storage with TTL
 - Cache insertion on verified draft-accepted responses only (escalated responses are not cached)
 - Cache lookup on request ingress (before drafting), supports both JSON and SSE responses
-- Conservative similarity threshold (cosine > 0.95) -- better to miss cache than return wrong answer
+- Conservative similarity threshold (cosine > 0.95) -better to miss cache than return wrong answer
 - TTL-based expiration with lazy cleanup of orphaned Qdrant points
 - Manual eviction API: DELETE /v1/cache/{id}
 - Cache disabled by default (*bool nil = false), requires Redis + Qdrant infrastructure
@@ -109,7 +109,7 @@ Repeated or semantically similar queries return cached responses with **< 50ms l
 
 ---
 
-## Phase 6 -- Production Hardening & Documentation (Week 8) [COMPLETE]
+## Phase 6 -Production Hardening & Documentation (Week 8) [COMPLETE]
 
 **Goal:** Make the project interview-ready and publicly presentable.
 

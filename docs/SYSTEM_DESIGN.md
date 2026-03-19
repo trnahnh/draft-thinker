@@ -90,7 +90,7 @@ The drafter can produce confidently wrong answers (low entropy, bad output). Thi
 1. Periodic accuracy audits on draft-accepted responses
 2. Downstream feedback loop for flagging bad responses
 3. Conservative initial threshold (err toward escalation)
-4. Accept as a tradeoff -- optimizing cost, not eliminating errors
+4. Accept as a tradeoff -optimizing cost, not eliminating errors
 
 ---
 

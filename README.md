@@ -10,7 +10,7 @@ LLM-powered applications send 100% of traffic to frontier models regardless of q
 - **Latency**: Frontier models have 2-5x higher time-to-first-token than small models.
 - **Scale**: At high throughput, frontier model rate limits become the bottleneck, not your application.
 
-The hard part isn't routing -- it's knowing *when* the cheap model is good enough without already having the right answer. Prompt classifiers ("is this question easy?") fail on distribution shift. A syntactically simple question can require complex reasoning depending on context.
+The hard part isn't routing -it's knowing *when* the cheap model is good enough without already having the right answer. Prompt classifiers ("is this question easy?") fail on distribution shift. A syntactically simple question can require complex reasoning depending on context.
 
 ## The Approach
 
@@ -32,7 +32,7 @@ The additional latency on escalated requests is `heavyweight_total - drafter_abo
 
 ### Semantic Cache
 
-Previously verified prompt-response pairs are cached via embedding similarity (OpenAI text-embedding-3-small + Qdrant). If an incoming prompt is semantically similar (cosine > 0.95) to a cached entry, the response is returned directly, bypassing the entire draft-verify cycle. Only draft-accepted responses are cached -- escalated responses indicate drafter uncertainty and are not safe to cache.
+Previously verified prompt-response pairs are cached via embedding similarity (OpenAI text-embedding-3-small + Qdrant). If an incoming prompt is semantically similar (cosine > 0.95) to a cached entry, the response is returned directly, bypassing the entire draft-verify cycle. Only draft-accepted responses are cached -escalated responses indicate drafter uncertainty and are not safe to cache.
 
 ## Tech Stack
 
@@ -49,12 +49,12 @@ No Python in the hot path. The draft-verify state machine is a Go switch stateme
 
 ## Current State
 
-- **Phase 1 -- Foundation**: Proxy with OpenAI integration (**status:** Complete).
-- **Phase 2 -- Entropy engine**: Logprob analysis and routing (**status:** Complete).
-- **Phase 3 -- Calibration**: Threshold sweep and benchmark dataset (**status:** Complete).
-- **Phase 4 -- Speculative execution**: Parallel heavyweight calls (**status:** Complete).
-- **Phase 5 -- Semantic cache**: Qdrant + embedding pipeline (**status:** Complete).
-- **Phase 6 -- Production hardening**: Grafana, load tests, docs (**status:** Complete).
+- **Phase 1 -Foundation**: Proxy with OpenAI integration (**status:** Complete).
+- **Phase 2 -Entropy engine**: Logprob analysis and routing (**status:** Complete).
+- **Phase 3 -Calibration**: Threshold sweep and benchmark dataset (**status:** Complete).
+- **Phase 4 -Speculative execution**: Parallel heavyweight calls (**status:** Complete).
+- **Phase 5 -Semantic cache**: Qdrant + embedding pipeline (**status:** Complete).
+- **Phase 6 -Production hardening**: Grafana, load tests, docs (**status:** Complete).
 
 ## Metrics
 
@@ -111,9 +111,9 @@ npm run dev
 
 ## Documentation
 
-- [System Design](docs/SYSTEM_DESIGN.md) -- architecture, entropy algorithm, speculative execution, cache design
-- [Development Phases](docs/PHASES.md) -- deliverables, exit criteria, and timeline per phase
-- [Metrics](docs/METRICS.md) -- metrics exposed by the gateway at the configured metrics path
+- [System Design](docs/SYSTEM_DESIGN.md) -architecture, entropy algorithm, speculative execution, cache design
+- [Development Phases](docs/PHASES.md) -deliverables, exit criteria, and timeline per phase
+- [Metrics](docs/METRICS.md) -metrics exposed by the gateway at the configured metrics path
 
 ## Inspired By
 
@@ -127,7 +127,7 @@ It pairs with [Ferrox](https://github.com/trnahnh/ferrox), a low-latency order m
 
 ## Contact
 
-**Anh Tran** -- [anhdtran.forwork@gmail.com](mailto:anhdtran.forwork@gmail.com)
+**Anh Tran** -[anhdtran.forwork@gmail.com](mailto:anhdtran.forwork@gmail.com)
 
 ## License
 
