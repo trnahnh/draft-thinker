@@ -5,7 +5,7 @@ export default function Architecture() {
     <div className="overflow-x-auto">
       <svg
         viewBox="0 0 520 460"
-        className="w-full min-w-[400px]"
+        className="w-full"
         xmlns="http://www.w3.org/2000/svg"
       >
         <defs>

@@ -25,12 +25,8 @@
   --color-amber-dim: rgba(255, 171, 0, 0.07);
 }
 
-html,
 body {
   overflow-x: hidden;
-}
-
-body {
   background: var(--color-bg);
   color: var(--color-text);
 }
