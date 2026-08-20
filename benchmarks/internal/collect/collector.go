@@ -88,6 +88,7 @@ func (c *Collector) Collect(ctx context.Context, prompt dataset.Prompt) (*Record
 			record.Tokens = append(record.Tokens, TokenRecord{
 				Token:   te.Token,
 				Entropy: te.Entropy,
+				Logprob: te.Logprob,
 				Index:   te.Index,
 			})
 			tokenIndex++

@@ -13,9 +13,11 @@ type CategoryStats struct {
 }
 
 type ThresholdStats struct {
+	Method         Method
 	Threshold      float64
 	EscalationRate float64
 	DraftAccuracy  float64
+	OverallAccuracy float64
 	Precision      float64
 	Recall         float64
 	F1             float64
@@ -32,8 +34,19 @@ type ThresholdStats struct {
 	ByCategory     map[string]*CategoryStats
 }
 
+// ComputeStats replays the entropy router at the given threshold. It is kept
+// as a thin wrapper around ComputeStatsWithPolicy for backward compatibility.
 func ComputeStats(records []*collect.Record, threshold float64, replayCfg ReplayConfig, pricing Pricing) ThresholdStats {
+	stats := ComputeStatsWithPolicy(records, MethodEntropyRouter, threshold, EntropyPolicy(threshold, replayCfg), pricing)
+	return stats
+}
+
+// ComputeStatsWithPolicy computes routing/cost/accuracy stats for an arbitrary
+// escalation policy, so entropy routing, confidence-threshold routing, and
+// always-heavyweight can all be evaluated against the same recorded traces.
+func ComputeStatsWithPolicy(records []*collect.Record, method Method, threshold float64, policy EscalationPolicy, pricing Pricing) ThresholdStats {
 	stats := ThresholdStats{
+		Method:     method,
 		Threshold:  threshold,
 		ByCategory: make(map[string]*CategoryStats),
 	}
@@ -48,8 +61,7 @@ func ComputeStats(records []*collect.Record, threshold float64, replayCfg Replay
 
 		stats.TotalPrompts++
 
-		result := Replay(r.Tokens, threshold, replayCfg)
-		wouldEscalate := result.WouldEscalate
+		wouldEscalate := policy(r.Tokens)
 		acceptable := r.Judge.Acceptable
 
 		if wouldEscalate {
@@ -69,7 +81,7 @@ func ComputeStats(records []*collect.Record, threshold float64, replayCfg Replay
 			stats.FN++
 		}
 
-		totalEstimated += EstimateCost(r, wouldEscalate, pricing)
+		totalEstimated += estimateCostForMethod(r, method, wouldEscalate, pricing)
 		totalBaseline += BaselineCost(r, pricing)
 
 		cat := r.Category
@@ -96,6 +108,14 @@ func ComputeStats(records []*collect.Record, threshold float64, replayCfg Replay
 	accepted := stats.TN + stats.FN
 	if accepted > 0 {
 		stats.DraftAccuracy = float64(stats.TN) / float64(accepted)
+	}
+
+	// Overall accuracy = fraction of ALL served responses judged acceptable.
+	// Escalated requests are treated as acceptable since they return the
+	// heavyweight response, which is itself the judge's reference answer.
+	// The only way to serve a bad response is FN: accepted-but-unacceptable.
+	if stats.TotalPrompts > 0 {
+		stats.OverallAccuracy = 1 - float64(stats.FN)/float64(stats.TotalPrompts)
 	}
 
 	if stats.TP+stats.FP > 0 {

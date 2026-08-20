@@ -3,6 +3,7 @@ package collect
 type TokenRecord struct {
 	Token   string  `json:"token"`
 	Entropy float64 `json:"entropy"`
+	Logprob float64 `json:"logprob"`
 	Index   int     `json:"index"`
 }
 

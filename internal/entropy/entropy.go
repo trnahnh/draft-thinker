@@ -37,6 +37,7 @@ func ComputeEntropy(topLogprobs []float64) float64 {
 type TokenEntropy struct {
 	Token   string
 	Entropy float64
+	Logprob float64
 	Index   int
 }
 
@@ -61,6 +62,7 @@ func ExtractTokenEntropy(chunk *protocol.StreamChunk, index int) []TokenEntropy 
 			results = append(results, TokenEntropy{
 				Token:   tl.Token,
 				Entropy: ComputeEntropy(logprobs),
+				Logprob: tl.Logprob,
 				Index:   index,
 			})
 			index++
