@@ -1,0 +1,52 @@
+{
+  "input": "benchmarks/results/collected_qwen2.5-coder-7b.jsonl.gz",
+  "records": 200,
+  "valid": 200,
+  "unacceptable_drafts": 200,
+  "ground_truth_records": 0,
+  "heavyweight_wrong": 0,
+  "pricing": "input+output",
+  "baseline_cost_per_1k_usd": 0.05280000000000001,
+  "bootstrap_iterations": 2000,
+  "bootstrap_seed": 42,
+  "headline": null,
+  "auroc": null,
+  "logprob_artifact": [
+    {
+      "category": "ambiguous_creative",
+      "records": 50,
+      "records_with_outside_top_k": 50,
+      "record_fraction": 1,
+      "tokens": 20551,
+      "tokens_outside_top_k": 1475,
+      "token_fraction": 0.0717726631307479
+    },
+    {
+      "category": "code_generation",
+      "records": 50,
+      "records_with_outside_top_k": 42,
+      "record_fraction": 0.84,
+      "tokens": 16386,
+      "tokens_outside_top_k": 174,
+      "token_fraction": 0.010618820944708897
+    },
+    {
+      "category": "multi_step_reasoning",
+      "records": 50,
+      "records_with_outside_top_k": 34,
+      "record_fraction": 0.68,
+      "tokens": 17504,
+      "tokens_outside_top_k": 123,
+      "token_fraction": 0.0070269652650822665
+    },
+    {
+      "category": "simple_factual",
+      "records": 50,
+      "records_with_outside_top_k": 5,
+      "record_fraction": 0.1,
+      "tokens": 1591,
+      "tokens_outside_top_k": 16,
+      "token_fraction": 0.01005656819610308
+    }
+  ]
+}

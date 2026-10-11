@@ -65,10 +65,13 @@ func confidentLogprobs() string {
 	)
 }
 
+// uncertainLogprobs returns five near-uniform alternatives, which gives a
+// per-token entropy of about 2.3 bits, above the production threshold of
+// 2.0, so the uncertain path actually escalates at the configured T.
 func uncertainLogprobs() string {
 	return fmt.Sprintf(
-		`"logprobs":{"content":[{"token":"tok","logprob":%f,"top_logprobs":[{"token":"tok","logprob":%f},{"token":"alt1","logprob":%f},{"token":"alt2","logprob":%f}]}]}`,
-		math.Log(0.34), math.Log(0.34), math.Log(0.33), math.Log(0.33),
+		`"logprobs":{"content":[{"token":"tok","logprob":%f,"top_logprobs":[{"token":"tok","logprob":%f},{"token":"alt1","logprob":%f},{"token":"alt2","logprob":%f},{"token":"alt3","logprob":%f},{"token":"alt4","logprob":%f}]}]}`,
+		math.Log(0.21), math.Log(0.21), math.Log(0.20), math.Log(0.20), math.Log(0.20), math.Log(0.19),
 	)
 }
 
