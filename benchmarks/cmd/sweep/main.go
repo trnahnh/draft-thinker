@@ -13,7 +13,7 @@ import (
 )
 
 func main() {
-	input := flag.String("input", "benchmarks/results/collected.jsonl", "collected JSONL input path")
+	input := flag.String("input", "benchmarks/results/collected.jsonl.gz", "collected JSONL (optionally .gz) input path")
 	output := flag.String("output", "benchmarks/results/sweep.csv", "sweep CSV output path")
 	thresholdsStr := flag.String("thresholds", "0.5,0.75,1.0,1.25,1.5", "comma-separated threshold values")
 	windowSize := flag.Int("window-size", 10, "entropy window size")

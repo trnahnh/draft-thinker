@@ -1,238 +1,244 @@
 # Results: Entropy Router vs. Baselines
 
-This document evaluates the entropy-based router against two baselines on the
-project's 520-prompt benchmark set: a naive top-1 confidence threshold, and an
-always-heavyweight ceiling. All numbers below come from actually running the
-tooling in `benchmarks/` against a real, freshly collected dataset — none are
-estimated or reused from earlier documentation without being re-verified.
+Every number in this document is produced by a command listed in section 9
+from trace files committed under `benchmarks/results/`. Nothing is estimated
+or carried over from earlier documentation. Where a result is negative for
+the project's thesis, it is reported as such.
 
-**Headline finding:** the entropy router reaches cost-reduction levels the
-naive confidence-threshold baseline cannot reach at all, but not because its
-per-token confidence signal is inherently better at moderate operating
-points — in that regime the two are comparable, and the confidence baseline
-is briefly *ahead*. The real advantage is robustness to a logprob-reporting
-artifact in the OpenAI API that permanently cripples the naive single-token
-signal. Details below, including a discrepancy with the previously published
-91.6% cost-reduction figure that we could not reproduce.
+**Headline, stated carefully.** On the project's own 519-prompt benchmark the
+windowed entropy router at the calibrated threshold T=2.0 cuts measured
+inference cost by 82.9% (bootstrap 95% CI 79.6% to 86.0%) at 98.1% served
+accuracy (CI 96.7% to 99.0%). However, a router that escalates the same
+fraction of requests at random reaches the same 98.1% accuracy at 83.9% cost
+reduction, and sending every request to the drafter alone reaches 97.9% at
+92.6%. On two public benchmarks with answer keys (GSM8K and MMLU) the
+windowed statistic has AUROC 0.51 and 0.47 as a detector of wrong drafts,
+which is chance. The cost savings are real and reproducible; they come from
+the drafter being cheap and usually right, not from the entropy signal
+selecting which requests to escalate. Trace-level statistics (mean entropy,
+minimum logprob) do carry signal (AUROC 0.63 to 0.76), which points to a
+better router design discussed in section 7.
 
 ---
 
-## 1. Dataset
+## 1. Datasets
 
-520 prompts across 4 categories (`benchmarks/testdata/prompts.json`):
+Three datasets, all committed so the sweeps replay offline:
 
-| Category | Count |
-|---|---|
-| `simple_factual` | 150 |
-| `multi_step_reasoning` | 150 |
-| `code_generation` | 110 |
-| `ambiguous_creative` | 110 |
+| Dataset | Prompts | Labels | Drafter wrong | Heavyweight wrong | Trace file |
+|---|---|---|---|---|---|
+| Project set (4 categories) | 519 valid of 520 | LLM-as-judge (gpt-4.1) vs. heavyweight reference | 11 (2.1%) | n/a (reference answer) | `collected.jsonl.gz` |
+| GSM8K test, seeded sample | 300 | exact numeric match to answer key | 22 (7.3%) | 14 (4.7%) | `collected_gsm8k.jsonl.gz` |
+| MMLU test, seeded sample | 300 | exact A to D match to answer key | 73 (24.3%) | 31 (10.3%) | `collected_mmlu.jsonl.gz` |
 
-One prompt (`multi_step_reasoning_087`) failed collection with a transient
-SSE read timeout and was excluded, leaving **519 valid records**.
+**Project set.** 150 simple factual, 150 multi-step reasoning, 110 code
+generation, 110 ambiguous/creative prompts (`benchmarks/testdata/prompts.json`).
+One prompt failed collection with a transient read timeout. The judge
+(`benchmarks/internal/collect/judge.go`) scores the draft 1 to 5 against the
+heavyweight response; score 3 or above is acceptable. Two caveats: the judge
+and the reference model are both gpt-4.1, so the heavyweight can never be
+judged wrong, and 4 of the 11 unacceptable drafts hit the 1024-token cap and
+were marked wrong for being truncated rather than for being mistaken.
 
-**Judge methodology:** for every prompt, the drafter (gpt-4.1-nano) and
-heavyweight (gpt-4.1) models each generate a response. An LLM judge (gpt-4.1,
-`benchmarks/internal/collect/judge.go`) scores the draft against the
-heavyweight response as reference on a 1-5 scale; score ≥ 3 is
-`acceptable=true`. This acceptability label is fixed per record — it does not
-change with the routing threshold. Only 11/519 drafts (2.1%) were ever judged
-unacceptable; keep that class imbalance in mind when reading precision/recall
-below.
+**GSM8K and MMLU.** Fetched by `benchmarks/cmd/fetchpublic` with seed 42
+(300 of 1319 GSM8K test rows; 60 pages of 5 rows from the 14042-row MMLU test
+split, 35 subjects). Prompts ask the model to reason then write a final
+answer line; both models are graded against the answer key, so
+always-heavyweight accuracy is measured rather than definitional. 9 of 300
+MMLU drafts and 2 heavyweight responses produced no parseable letter and
+count as wrong.
 
-## 2. New instrumentation: why this required a fresh collection
+Drafter: gpt-4.1-nano with top-5 logprobs. Heavyweight: gpt-4.1. Collection
+cost for GSM8K plus MMLU was under USD 2 at list prices.
 
-The original `collected.jsonl` stored only the derived Shannon entropy per
-token, not the raw logprob it was computed from — entropy is a lossy
-aggregate over the top-k candidate distribution, so a single token's top-1
-logprob isn't recoverable from it after the fact. Implementing the
-confidence-threshold baseline required capturing that raw value, so:
+## 2. Methods compared
 
-- `internal/entropy/entropy.go` and `benchmarks/internal/collect/{record,collector}.go`
-  were extended to also persist each token's `logprob` (the OpenAI-reported
-  logprob of the actually-sampled token) alongside its entropy.
-- The full 520-prompt dataset was re-collected against the real OpenAI API
-  (drafter + heavyweight reference + judge, ~$2.94 estimated cost, approved
-  before running) so entropy routing, confidence-threshold routing, and
-  always-heavyweight are all evaluated against the *same* frozen draft
-  samples and judge verdicts — a fair, internally consistent comparison.
-- The prior dataset is preserved at `benchmarks/results/collected.pre_logprob.jsonl.bak`.
+All methods are `sweep.EscalationPolicy` functions in
+`benchmarks/internal/sweep/policy.go`, replayed against the same recorded
+traces. No API calls happen during a sweep.
 
-## 3. Methodology
+| Method | Decision rule | Needs full draft? |
+|---|---|---|
+| `entropy_router` | Production algorithm: 10-token sliding window over per-token Shannon entropy (bits, top-5 renormalized); escalate when a token in the first 10 exceeds T or the window average exceeds T | No (early exit) |
+| `mean_entropy_router` | Escalate when the trace-wide mean entropy exceeds a threshold chosen so the escalation rate matches `entropy_router` at T=2.0 | Yes |
+| `confidence_threshold` | Escalate when the minimum sampled-token logprob is below a threshold | Yes |
+| `random_matched_rate` | Escalate a fixed fraction chosen by hashing the prompt ID, matched to `entropy_router` at T=2.0 | n/a |
+| `always_drafter` | Never escalate (cost floor) | n/a |
+| `always_heavyweight` | Always escalate (cost ceiling) | n/a |
+| `oracle` | Escalate exactly the wrong drafts (unattainable upper bound) | n/a |
 
-All three methods are implemented as `sweep.EscalationPolicy` functions
-(`benchmarks/internal/sweep/policy.go`) replayed against the same recorded
-token traces — no new API calls happen during sweeping.
+**Cost model** (`benchmarks/internal/sweep/cost.go`): gpt-4.1-nano at USD
+0.20 / 0.80 per 1M input / output tokens, gpt-4.1 at USD 2.50 / 10.00. Both
+input and output tokens are priced; prompt tokens come from provider usage
+where recorded and a chars/4 estimate on the older project-set traces. The
+earlier calibration ignored input tokens entirely. `-output-only-pricing`
+reproduces that model; on the project set it moves cost reduction at T=2.0
+by less than 0.1 point because prompts are short. Routers pay the full
+drafter output even when escalating (the stream is aborted, but tokens
+already generated are billed).
 
-**Entropy router** (production algorithm, `sweep.EntropyPolicy`): sliding
-window of size 10 over per-token Shannon entropy (computed from the top-5
-logprobs OpenAI returns). Escalates if the windowed average exceeds
-threshold `T`, with an early-exit check on the first 10 tokens. Swept at
-`T ∈ {1.00, 1.25, 1.50, 1.75, 2.00, 2.25, 2.50}`, matching the range in
-`docs/METRICS.md`.
+**Accuracy** is the fraction of served responses that were correct. With
+the LLM judge an escalated request is correct by construction. With answer
+keys, an escalation to a heavyweight that is also wrong counts as wrong.
 
-**Confidence threshold** (`sweep.ConfidencePolicy`): no entropy, no window,
-no early exit. Generates the full drafter response, takes the single lowest
-per-token logprob across it, and escalates if that minimum is below
-threshold. Swept at seventeen thresholds from `-0.01` to `-40.0`.
+**Latency** is estimated from the per-call latencies recorded during
+collection for the serial path: an accepted draft costs the drafter call;
+an escalation costs the fraction of the drafter call before the decision
+plus the heavyweight call. These are OpenAI round trips from a residential
+connection at 3-way concurrency, not gateway overhead.
 
-**Always heavyweight** (`sweep.AlwaysHeavyweightPolicy`): every request goes
-straight to gpt-4.1. This never calls the drafter, so its cost is exactly
-the heavyweight-only baseline cost by construction — cost reduction is 0%
-by definition, not something measured with variance. Its "100% accuracy" in
-the table below is a **definitional artifact**: the heavyweight response is
-the judge's reference answer, so it cannot be judged against itself as
-unacceptable. It is a cost/accuracy ceiling, not evidence gpt-4.1 is
-independently 100% correct.
+**Intervals** are percentile bootstrap, 2000 resamples of records with
+replacement, seed 42.
 
-**Cost model** (`benchmarks/internal/sweep/cost.go`, unchanged from the
-existing sweep tool): $0.20 / $0.80 per 1M drafter input/output tokens,
-$2.50 / $10.00 per 1M heavyweight input/output tokens. Entropy and
-confidence routing both pay the drafter's cost on every request (they need
-its output to make the decision); always-heavyweight does not.
+## 3. Project set (519 prompts, LLM-as-judge)
 
-**Overall accuracy** (new metric, alongside the existing `draft_accuracy`
-from METRICS.md): fraction of *all* served responses judged acceptable,
-`1 - FN/total`. `draft_accuracy` (`TN/(TN+FN)`) only looks at the
-non-escalated subset and can look artificially strong at aggressive
-thresholds where almost nothing is accepted; `overall_accuracy` is what
-matters for the cost/accuracy tradeoff plot below.
+| Method | Threshold | Escalation | Accuracy (95% CI) | Cost reduction (95% CI) | USD / 1k requests |
+|---|---|---|---|---|---|
+| entropy_router | 2.00 | 7.7% | 98.1% (96.7 to 99.0) | 82.9% (79.6 to 86.0) | 0.534 |
+| mean_entropy_router | 0.77 | 7.5% | 97.9% (96.5 to 99.0) | 82.0% (78.5 to 85.1) | 0.564 |
+| confidence_threshold | -15.00 | 18.7% | 98.8% (97.9 to 99.6) | 61.7% (56.5 to 66.9) | 1.199 |
+| random_matched_rate | 7.7% | 7.9% | 98.1% (96.7 to 99.0) | 83.9% (80.6 to 86.7) | 0.504 |
+| always_drafter | n/a | 0.0% | 97.9% (96.5 to 99.0) | 92.6% (92.3 to 92.8) | 0.233 |
+| always_heavyweight | n/a | 100.0% | 100.0% (definitional) | 0.0% | 3.127 |
+| oracle | n/a | 2.1% | 100.0% | 87.7% (84.5 to 90.3) | 0.384 |
 
-## 4. Results
+Confusion matrix for entropy_router at T=2.0: TP 1, FP 39, TN 469, FN 10.
+The router escalated 40 requests and exactly one of them was a bad draft.
+Random escalation at the same rate also caught one. All 11 bad drafts have
+mean entropy between 0.10 and 0.48 bits; they are confident mistakes.
 
-Full sweep: [`benchmarks/results/compare.csv`](../benchmarks/results/compare.csv). Condensed:
+Full sweep: `benchmarks/results/compare.csv`. Per category:
+`benchmarks/results/compare_by_category.csv`. At T=2.0 the router escalates
+19.1% of creative prompts, 11.4% of reasoning, 1.8% of code and 0.0% of
+factual prompts; 10 of the 11 bad drafts are in reasoning, where served
+accuracy is 94.0%.
 
-| Method | Threshold | Escalation Rate | Overall Accuracy | Cost Reduction |
-|---|---|---|---|---|
-| entropy_router | 1.00 | 68.0% | 100.0% | 3.5% |
-| entropy_router | 1.25 | 48.6% | 99.8% | 24.3% |
-| entropy_router | 1.50 | 32.6% | 99.0% | 46.3% |
-| entropy_router | 1.75 | 15.6% | 98.3% | 73.3% |
-| **entropy_router** | **2.00** | **7.7%** | **98.1%** | **82.9%** |
-| entropy_router | 2.25 | 0.8% | 97.9% | 91.9% |
-| entropy_router | 2.50 | 0.0% | 97.9% | 92.6% |
-| confidence_threshold | -0.01 | 92.9% | 100.0% | -7.1% |
-| confidence_threshold | -1.00 | 80.2% | 100.0% | -5.8% |
-| confidence_threshold | -3.00 | 69.4% | 99.8% | -0.5% |
-| confidence_threshold | -5.00 | 47.0% | 99.4% | 21.5% |
-| confidence_threshold | -8.00 | 22.4% | 99.0% | 56.0% |
-| confidence_threshold | -10.00 | 19.3% | 98.8% | 60.8% |
-| **confidence_threshold** | **-15.00 and beyond** | **18.7%** | **98.8%** | **61.5% (hard ceiling)** |
-| always_heavyweight | n/a | 100.0% | 100.0%¹ | 0.0% |
+## 4. GSM8K (300 prompts, answer key)
 
-¹ Definitional, see §3.
+The drafter solves 92.7% and the heavyweight 95.3%. 13 drafts are wrong where
+the heavyweight is right, so the most any router can gain is 4.3 points.
 
-Cost-reduction vs. accuracy tradeoff:
+| Method | Threshold | Escalation | Accuracy (95% CI) | Cost reduction (95% CI) | USD / 1k requests |
+|---|---|---|---|---|---|
+| entropy_router | 2.00 | 5.3% | 93.0% (90.0 to 95.7) | 84.3% (81.4 to 87.0) | 0.293 |
+| mean_entropy_router | 0.40 | 5.0% | 94.3% (91.7 to 96.7) | 84.4% (81.0 to 87.3) | 0.290 |
+| confidence_threshold | -10.00 | 5.0% | 93.7% (90.7 to 96.3) | 83.8% (79.9 to 87.2) | 0.303 |
+| random_matched_rate | 5.3% | 5.3% | 92.7% (89.3 to 95.3) | 84.6% (81.4 to 87.3) | 0.288 |
+| always_drafter | n/a | 0.0% | 92.7% (89.3 to 95.3) | 90.2% (89.7 to 90.6) | 0.183 |
+| always_heavyweight | n/a | 100.0% | 95.3% (93.0 to 97.7) | 0.0% | 1.866 |
+| oracle | n/a | 7.3% | 97.0% (95.0 to 98.7) | 82.5% (78.8 to 85.8) | 0.326 |
 
-![Cost reduction vs accuracy tradeoff](../benchmarks/results/tradeoff.png)
+entropy_router at T=2.0 caught 2 of 22 wrong drafts (TP 2, FP 14, FN 20).
+The mean-entropy variant caught 6 of 22 at the same escalation rate (TP 6,
+FP 9, FN 16). The intervals overlap, so this is suggestive, not conclusive.
 
-## 5. Discussion — where entropy wins, where it doesn't
+## 5. MMLU (300 prompts, answer key)
 
-**In the conservative-to-moderate regime, the two methods are genuinely
-comparable, and confidence-threshold is briefly ahead.** At matched overall
-accuracy of 99.04%, entropy routing (`T=1.50`) achieves 46.3% cost
-reduction; confidence-threshold (`threshold=-8.00`) achieves 56.0% —
-*higher* cost reduction at the same accuracy. If your target operating
-point is in this range, the extra complexity of windowed entropy and
-early-exit isn't obviously earning its keep over a single logprob check.
+MMLU is the hardest set for the drafter (75.7%) and has the most headroom:
+the heavyweight reaches 89.7%, and 50 drafts are wrong where the heavyweight
+is right.
 
-**Past ~60% cost reduction, confidence-threshold cannot follow — at any
-threshold.** Its curve hits a hard ceiling at 61.5% cost reduction /
-18.7% escalation rate that does not move between `threshold=-15` and
-`threshold=-40`. Entropy routing keeps climbing to 82.9% (T=2.00) and 92.6%
-(T=2.50).
+| Method | Threshold | Escalation | Accuracy (95% CI) | Cost reduction (95% CI) | USD / 1k requests |
+|---|---|---|---|---|---|
+| entropy_router | 2.00 | 18.7% | 77.3% (72.7 to 82.0) | 75.2% (70.4 to 79.9) | 0.549 |
+| mean_entropy_router | 0.77 | 18.3% | 79.3% (74.7 to 83.7) | 72.1% (66.6 to 77.1) | 0.617 |
+| confidence_threshold | -12.00 | 23.0% | 81.7% (77.0 to 86.0) | 62.6% (56.2 to 69.0) | 0.828 |
+| random_matched_rate | 18.7% | 18.7% | 76.7% (72.0 to 81.3) | 74.8% (69.7 to 79.1) | 0.558 |
+| always_drafter | n/a | 0.0% | 75.7% (71.0 to 80.3) | 92.7% (92.2 to 93.0) | 0.163 |
+| always_heavyweight | n/a | 100.0% | 89.7% (86.0 to 93.0) | 0.0% | 2.215 |
+| oracle | n/a | 24.3% | 92.3% (89.3 to 95.0) | 62.2% (55.8 to 68.8) | 0.837 |
 
-**The reason for the ceiling is a real, diagnosable artifact, not
-noise.** 97/519 records (18.7%) contain at least one token where the OpenAI
-API reports `logprob: -9999.0` for the actually-sampled token — a known API
-quirk that occurs when the sampled token falls outside the requested
-top-N logprob candidates. This sentinel poisons the confidence-threshold
-signal: once a response contains one, its minimum logprob is -9999
-regardless of how lenient the threshold gets, so it always escalates. It is
-heavily concentrated by category:
+Here the production router buys 1.6 points of accuracy over always-drafter
+for 17.5 points of cost reduction, and random escalation buys 1.0 point for
+the same spend. The oracle shows that 14 points were available at a 62% cost
+reduction. The simple min-logprob baseline gets closer to that than either
+entropy router does.
 
-| Category | Records with the artifact |
-|---|---|
-| `simple_factual` | 0 / 150 (0.0%) |
-| `code_generation` | 6 / 110 (5.5%) |
-| `multi_step_reasoning` | 19 / 149 (12.8%) |
-| `ambiguous_creative` | 72 / 110 (65.5%) |
+## 6. Signal quality independent of threshold (AUROC)
 
-This tracks with lexical diversity — open-ended creative generation is far
-more likely to sample a token outside the top-5 candidates than a
-deterministic factual answer. The entropy router is unaffected by this
-specific artifact because its signal is computed from the returned top-k
-*alternatives* distribution, not from the sampled token's own reported
-logprob — a single corrupted field doesn't dominate a windowed average the
-way it dominates a single min() over the whole response. This is the real,
-defensible advantage of entropy routing over the naive baseline: not signal
-quality at a given operating point, but robustness that lets it scale into
-a cost-savings regime the simpler method structurally cannot reach.
+AUROC of each per-request score as a detector of wrong drafts. 0.5 is
+chance. `entropy_window_peak` is the exact statistic the production router
+thresholds (a record escalates at T iff its peak exceeds T).
 
-**Class imbalance makes precision/recall/F1 look weak for every method,
-including entropy routing at its documented threshold.** Only 11/519 drafts
-were ever judged unacceptable, so the positive class for the confusion
-matrix is tiny; F1 tops out around 0.10 for entropy_router even at
-T=2.00. This is a property of the dataset (the drafter is good, bad drafts
-are rare) and applies equally to all three methods — it is not evidence any
-method is failing, but it does mean F1 alone is a poor way to compare them
-here. Escalation rate, overall accuracy, and cost reduction are the more
-informative axes, which is why the table and plot lead with those.
-
-**The previously published 91.6% cost-reduction headline (`docs/METRICS.md`,
-T=2.0) did not replicate in this independent re-collection.** The new
-estimate at the same threshold is 82.9%, with a 95% bootstrap CI of
-[79.6%, 86.0%] — the old figure falls outside that interval. Escalation rate
-at T=2.0 only moved from 6.0% to 7.7% between the two runs, but cost
-reduction dropped by nearly 9 points; the likely explanation is that the
-~40-record escalated set is small enough that its aggregate cost is
-sensitive to exactly which prompts land in it (heavyweight response length
-varies a lot request to request, and both drafter and judge sampling are
-non-deterministic across independent collection runs). This is precisely
-the failure mode a bootstrap CI is meant to catch — a bare point estimate on
-~500 prompts is not a stable number, and the original 91.6% should be
-treated as an optimistic draw rather than a reproducible constant. We are
-not updating `docs/METRICS.md` here since that's a judgment call for you to
-make; flagging it is the scope of this document.
-
-## 6. Bootstrap confidence intervals
-
-2000 resamples, seed 42 (`sweep.Bootstrap`, `benchmarks/internal/sweep/bootstrap.go`):
-
-| Method | Threshold | Cost Reduction (95% CI) | Overall Accuracy (95% CI) |
+| Score | Project set (11 pos.) | GSM8K (22 pos.) | MMLU (73 pos.) |
 |---|---|---|---|
-| entropy_router | T=2.00 | 82.9% [79.6%, 86.0%] | 98.1% [96.7%, 99.0%] |
-| confidence_threshold | threshold=-15.00 (matched cost reduction, capped) | 61.5% [56.3%, 66.8%] | 98.8% [97.9%, 99.6%] |
+| entropy_window_peak | 0.684 (0.590 to 0.779) | 0.509 (0.357 to 0.649) | 0.474 (0.399 to 0.551) |
+| mean_entropy | 0.515 (0.382 to 0.643) | 0.760 (0.650 to 0.858) | 0.626 (0.547 to 0.698) |
+| frac_tokens_above_1bit | 0.527 (0.400 to 0.654) | 0.720 (0.597 to 0.830) | 0.624 (0.550 to 0.694) |
+| neg_min_logprob | 0.714 (0.554 to 0.861) | 0.621 (0.493 to 0.742) | 0.682 (0.611 to 0.745) |
 
-The confidence-threshold interval is the closest the method can get to
-entropy's cost reduction — its own ceiling — not a matched point, since it
-cannot reach 82.9% at any threshold (§5).
+Reading: the windowed peak is the only score that is informative on the
+project set and the only one that is uninformative on both public sets.
+The project set's positives are dominated by truncated and multi-step
+reasoning drafts where a late burst of uncertainty is plausible; on GSM8K
+and MMLU almost every response has some high-entropy window (formatting
+choices, the first word), so the peak saturates near its 2.32-bit maximum
+for right and wrong drafts alike. Sustained uncertainty (the mean, or the
+share of tokens above 1 bit) separates them better.
 
-## 7. Reproducing this
+## 7. What this means for the design
+
+1. **The savings are real but are not routing savings.** On every dataset
+   `always_drafter` is the cheapest point and the router sits within one
+   accuracy point of it. The honest one-line claim is "a cheap drafter
+   handles 93 to 98% of this traffic acceptably", not "entropy picks the
+   right requests to escalate".
+2. **The windowed early-exit statistic is the wrong statistic.** It is the
+   one that enables speculative execution (decide before the draft ends),
+   so there is a real tension: the mean needs the whole draft, which costs
+   latency on escalations. A middle ground worth testing is a windowed
+   mean over the last N tokens checked at the end, or a running mean with a
+   minimum token count before any decision.
+3. **Threshold 2.0 is near the ceiling.** With top-5 logprobs the maximum
+   per-token entropy is log2(5) = 2.32 bits. T=2.25 and T=2.50 are
+   effectively unreachable, which is why those sweep rows are degenerate.
+4. **The judge-based set cannot evaluate routers.** With 11 positives and a
+   reference model that is correct by construction, no method can be
+   distinguished from random. The answer-key sets are the ones to calibrate
+   on.
+5. **The published 91.6% was not reproducible.** Replaying the original
+   trace file (`collected.pre_logprob.jsonl.gz`) with the current tooling
+   gives 84.8% at T=2.0; the current trace gives 82.9%. No committed code
+   or data produces 91.6%.
+
+## 8. OpenAI logprob artifact and an open model
+
+For 18.7% of project-set records (65.5% of creative prompts) OpenAI reports
+`logprob: -9999` for at least one sampled token, meaning the sampled token
+was outside the requested top-5. A min-logprob router cannot be made more
+lenient than this sentinel, which caps `confidence_threshold` at 61.7% cost
+reduction on the project set. The same event occurs on 28.7% of GSM8K
+records and 74.3% of MMLU records (1.7% of MMLU tokens).
+
+The sentinel is an API encoding, not a model property. The collector now
+records `outside_top_k` per token (true when the sampled token is absent
+from the returned alternatives) so the event can be measured on any
+OpenAI-compatible server. Section 8.1 reports the same measurement on a
+locally served open model.
+
+### 8.1 Open model (qwen2.5-coder:7b via Ollama)
+
+Pending: filled in from `benchmarks/results/collected_qwen2.5-coder-7b.jsonl.gz`.
+
+## 9. Reproducing
 
 ```bash
-# Full recollection (real API cost, ~$2.94 for 520 prompts at current pricing)
-OPENAI_API_KEY=... go run ./benchmarks/cmd/collect -output benchmarks/results/collected.jsonl
+# Replay sweeps and bootstrap CIs from the committed traces. No API calls.
+go run ./benchmarks/cmd/compare -input benchmarks/results/collected.jsonl.gz       -output benchmarks/results/compare.csv
+go run ./benchmarks/cmd/compare -input benchmarks/results/collected_gsm8k.jsonl.gz -output benchmarks/results/compare_gsm8k.csv
+go run ./benchmarks/cmd/compare -input benchmarks/results/collected_mmlu.jsonl.gz  -output benchmarks/results/compare_mmlu.csv
 
-# Three-method comparison sweep + bootstrap CI, no API calls (replays recorded traces)
-go run ./benchmarks/cmd/compare -output benchmarks/results/compare.csv
+# Each run also writes <output>_by_category.csv and <output>.json (headline numbers with CIs).
+# -output-only-pricing reproduces the original cost model that ignored prompt tokens.
 
-# Plot
-python benchmarks/plot_tradeoff.py
+# Re-collect (real API spend; non-deterministic sampling means numbers will move within the CIs)
+go run ./benchmarks/cmd/fetchpublic -dataset gsm8k -n 300 -seed 42
+go run ./benchmarks/cmd/fetchpublic -dataset mmlu  -n 300 -seed 42
+OPENAI_API_KEY=... go run ./benchmarks/cmd/collect -prompts benchmarks/testdata/gsm8k_300.json -output benchmarks/results/collected_gsm8k.jsonl
+OPENAI_API_KEY=... go run ./benchmarks/cmd/collect -prompts benchmarks/testdata/mmlu_300.json  -output benchmarks/results/collected_mmlu.jsonl
+
+# Drafter-only traces from a local OpenAI-compatible server (no API spend)
+go run ./benchmarks/cmd/collect -drafter-only -drafter-base-url http://localhost:11434/v1 \
+  -drafter-model qwen2.5-coder:7b -drafter-key-env NONE -limit 50 -max-tokens 512 \
+  -output benchmarks/results/collected_qwen2.5-coder-7b.jsonl
 ```
-
-## 8. What would strengthen this further
-
-- **Category-stratified sweep.** The artifact in §5 is category-correlated;
-  a per-category breakdown of the tradeoff curve (not just the aggregate)
-  would show whether entropy's advantage is concentrated in
-  `ambiguous_creative` or holds broadly. Not done here for scope.
-- **A second independent collection run** to see whether 82.9% at T=2.0
-  replicates, given it already moved once. The bootstrap CI models sampling
-  uncertainty *within* one collected dataset, not the added variance from
-  redrawing the underlying draft/judge samples themselves.
-- **A confidence-threshold variant with sentinel-value handling** (e.g.
-  falling back to entropy or skipping the token when logprob is a
-  known-sentinel) would isolate whether the entropy router's edge really is
-  robustness to this artifact, as claimed, versus something else. Left as
-  the literal, unmodified simplest baseline per the original request.
