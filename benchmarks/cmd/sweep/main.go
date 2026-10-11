@@ -88,7 +88,6 @@ func parseThresholds(s string) ([]float64, error) {
 	return thresholds, nil
 }
 
-
 func countErrors(records []*collect.Record) int {
 	n := 0
 	for _, r := range records {

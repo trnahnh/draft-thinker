@@ -15,8 +15,8 @@ const (
 var (
 	finalAnswerRe = regexp.MustCompile(`(?i)final answer\s*[:=]?\s*\**\s*\$?\s*(-?[\d,]*\.?\d+)`)
 	numberRe      = regexp.MustCompile(`-?\d[\d,]*\.?\d*`)
-	choiceLineRe  = regexp.MustCompile(`(?i)answer\s*[:=]?\s*\**\s*\(?([A-D])\b`)
-	leadChoiceRe  = regexp.MustCompile(`^\s*\(?([A-D])[\).:\s]`)
+	choiceLineRe  = regexp.MustCompile(`(?i)answer\s*[:=]?\s*\**\s*\(?([A-E])\b`)
+	leadChoiceRe  = regexp.MustCompile(`^\s*\(?([A-E])[\).:\s]`)
 )
 
 // ExtractNumericAnswer pulls the final numeric answer out of a free-form
@@ -43,7 +43,7 @@ func normalizeNumber(s string) string {
 	return strconv.FormatFloat(f, 'f', -1, 64)
 }
 
-// ExtractChoiceAnswer pulls a single letter A-D out of a multiple-choice
+// ExtractChoiceAnswer pulls a single letter A-E out of a multiple-choice
 // response, preferring the last explicit "Answer: X" line.
 func ExtractChoiceAnswer(response string) string {
 	matches := choiceLineRe.FindAllStringSubmatch(response, -1)

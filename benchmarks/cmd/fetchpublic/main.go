@@ -1,8 +1,11 @@
 // fetchpublic builds benchmark prompt files from public datasets with
 // answer keys, so routing accuracy can be scored by exact match instead of
-// an LLM judge. Supported: GSM8K test split (numeric answers) and MMLU test
-// split (four-way multiple choice). Sampling is seeded so the resulting
-// prompt file is reproducible from the command line alone.
+// an LLM judge. Supported: GSM8K test split (numeric answers), MMLU test
+// split (four-way multiple choice) and ARC-Challenge test split (three- to
+// five-way multiple choice). Sampling is seeded so the resulting prompt
+// file is reproducible from the command line alone. Previously sampled
+// prompt files can be excluded so a second sample is disjoint from the
+// first.
 package main
 
 import (
@@ -14,7 +17,9 @@ import (
 	"log"
 	"math/rand"
 	"net/http"
+	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -24,31 +29,51 @@ import (
 const (
 	gsm8kURL     = "https://raw.githubusercontent.com/openai/grade-school-math/master/grade_school_math/data/test.jsonl"
 	mmluRowsURL  = "https://datasets-server.huggingface.co/rows?dataset=cais/mmlu&config=all&split=test"
+	arcRowsURL   = "https://datasets-server.huggingface.co/rows?dataset=allenai/ai2_arc&config=ARC-Challenge&split=test"
 	mmluTestRows = 14042
-	mmluPacing   = 1500 * time.Millisecond
+	arcTestRows  = 1172
+	hfPacing     = 1500 * time.Millisecond
 )
 
+var letters = []string{"A", "B", "C", "D", "E"}
+
+var testRowRe = regexp.MustCompile(`test_row_(\d+)`)
+
 func main() {
-	name := flag.String("dataset", "gsm8k", "gsm8k or mmlu")
+	name := flag.String("dataset", "gsm8k", "gsm8k, mmlu or arc")
 	n := flag.Int("n", 300, "number of prompts to sample")
 	seed := flag.Int64("seed", 42, "sampling seed")
 	output := flag.String("output", "", "output prompts JSON path (default benchmarks/testdata/<dataset>_<n>.json)")
+	exclude := flag.String("exclude", "", "comma-separated prompt files whose source rows must not be sampled again")
+	idPrefix := flag.String("id-prefix", "", "prompt ID prefix (default <dataset>_)")
 	flag.Parse()
 
 	if *output == "" {
 		*output = fmt.Sprintf("benchmarks/testdata/%s_%d.json", *name, *n)
+	}
+	if *idPrefix == "" {
+		*idPrefix = *name + "_"
+	}
+
+	excluded, err := loadExcludedRows(*exclude)
+	if err != nil {
+		log.Fatalf("loading exclusions: %v", err)
+	}
+	if len(excluded) > 0 {
+		log.Printf("excluding %d previously sampled source rows", len(excluded))
 	}
 
 	httpClient := &http.Client{Timeout: 60 * time.Second}
 	rng := rand.New(rand.NewSource(*seed))
 
 	var prompts []dataset.Prompt
-	var err error
 	switch *name {
 	case "gsm8k":
-		prompts, err = fetchGSM8K(httpClient, rng, *n)
+		prompts, err = fetchGSM8K(httpClient, rng, *n, *idPrefix, excluded)
 	case "mmlu":
-		prompts, err = fetchMMLU(httpClient, rng, *n)
+		prompts, err = fetchMMLU(httpClient, rng, *n, *idPrefix, excluded)
+	case "arc":
+		prompts, err = fetchARC(httpClient, rng, *n, *idPrefix, excluded)
 	default:
 		log.Fatalf("unknown dataset %q", *name)
 	}
@@ -66,12 +91,40 @@ func main() {
 	log.Printf("wrote %d prompts to %s", len(prompts), *output)
 }
 
+// loadExcludedRows reads prompt files written by this tool and returns the
+// source row indices they were sampled from, parsed from the Subject field.
+func loadExcludedRows(paths string) (map[int]bool, error) {
+	out := map[int]bool{}
+	for _, p := range strings.Split(paths, ",") {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+		ds, err := dataset.Load(p)
+		if err != nil {
+			return nil, err
+		}
+		for _, pr := range ds.Prompts {
+			m := testRowRe.FindStringSubmatch(pr.Subject)
+			if m == nil {
+				return nil, fmt.Errorf("%s: prompt %s has no test_row marker in subject %q", p, pr.ID, pr.Subject)
+			}
+			idx, err := strconv.Atoi(m[1])
+			if err != nil {
+				return nil, err
+			}
+			out[idx] = true
+		}
+	}
+	return out, nil
+}
+
 type gsm8kRow struct {
 	Question string `json:"question"`
 	Answer   string `json:"answer"`
 }
 
-func fetchGSM8K(c *http.Client, rng *rand.Rand, n int) ([]dataset.Prompt, error) {
+func fetchGSM8K(c *http.Client, rng *rand.Rand, n int, idPrefix string, excluded map[int]bool) ([]dataset.Prompt, error) {
 	resp, err := c.Get(gsm8kURL)
 	if err != nil {
 		return nil, err
@@ -100,12 +153,7 @@ func fetchGSM8K(c *http.Client, rng *rand.Rand, n int) ([]dataset.Prompt, error)
 	}
 	log.Printf("gsm8k test split: %d rows", len(rows))
 
-	idx := rng.Perm(len(rows))
-	if n > len(idx) {
-		n = len(idx)
-	}
-	chosen := idx[:n]
-	sort.Ints(chosen)
+	chosen := sampleIndices(rng, len(rows), n, excluded)
 
 	prompts := make([]dataset.Prompt, 0, n)
 	for i, rowIdx := range chosen {
@@ -117,7 +165,7 @@ func fetchGSM8K(c *http.Client, rng *rand.Rand, n int) ([]dataset.Prompt, error)
 		answer := strings.TrimSpace(r.Answer[sep+4:])
 		answer = strings.ReplaceAll(answer, ",", "")
 		prompts = append(prompts, dataset.Prompt{
-			ID:       fmt.Sprintf("gsm8k_%04d", i+1),
+			ID:       fmt.Sprintf("%s%04d", idPrefix, i+1),
 			Category: dataset.GSM8K,
 			Text:     r.Question + "\n\nSolve the problem step by step. On the last line, write only: Final answer: <number>",
 			Answer:   answer,
@@ -126,6 +174,25 @@ func fetchGSM8K(c *http.Client, rng *rand.Rand, n int) ([]dataset.Prompt, error)
 		})
 	}
 	return prompts, nil
+}
+
+// sampleIndices draws n distinct indices from [0, total) in seeded random
+// order, skipping excluded ones, and returns them sorted. With no
+// exclusions it reproduces the original fetchpublic sampling exactly.
+func sampleIndices(rng *rand.Rand, total, n int, excluded map[int]bool) []int {
+	perm := rng.Perm(total)
+	chosen := make([]int, 0, n)
+	for _, idx := range perm {
+		if len(chosen) >= n {
+			break
+		}
+		if excluded[idx] {
+			continue
+		}
+		chosen = append(chosen, idx)
+	}
+	sort.Ints(chosen)
+	return chosen
 }
 
 type mmluRowsResponse struct {
@@ -144,24 +211,23 @@ type mmluRowsResponse struct {
 // The test split is ordered by subject, so it draws small pages (five rows)
 // at many distinct random offsets rather than one large page, which would
 // collapse the sample onto a handful of subjects. Requests are paced
-// because the API rate-limits aggressively.
-func fetchMMLU(c *http.Client, rng *rand.Rand, n int) ([]dataset.Prompt, error) {
+// because the API rate-limits aggressively. Excluded rows are skipped and
+// further pages are drawn until n prompts are collected.
+func fetchMMLU(c *http.Client, rng *rand.Rand, n int, idPrefix string, excluded map[int]bool) ([]dataset.Prompt, error) {
 	const pageLen = 5
-	pages := (n + pageLen - 1) / pageLen
 	maxStart := mmluTestRows - pageLen
 	perm := rng.Perm(maxStart)
-	if pages > len(perm) {
-		pages = len(perm)
-	}
-	offsets := perm[:pages]
-	sort.Ints(offsets)
 
-	letters := []string{"A", "B", "C", "D"}
 	prompts := make([]dataset.Prompt, 0, n)
-	for i, off := range offsets {
-		if i > 0 {
-			time.Sleep(mmluPacing)
+	pages := 0
+	for _, off := range perm {
+		if len(prompts) >= n {
+			break
 		}
+		if pages > 0 {
+			time.Sleep(hfPacing)
+		}
+		pages++
 		url := fmt.Sprintf("%s&offset=%d&length=%d", mmluRowsURL, off, pageLen)
 		var parsed mmluRowsResponse
 		if err := getJSONWithRetry(c, url, &parsed); err != nil {
@@ -174,31 +240,117 @@ func fetchMMLU(c *http.Client, rng *rand.Rand, n int) ([]dataset.Prompt, error) 
 			if len(prompts) >= n {
 				break
 			}
+			if excluded[pr.RowIdx] {
+				continue
+			}
 			row := pr.Row
 			if len(row.Choices) != 4 || row.Answer < 0 || row.Answer > 3 {
 				return nil, fmt.Errorf("row %d: unexpected choices/answer shape", pr.RowIdx)
 			}
-			var b strings.Builder
-			b.WriteString(strings.TrimSpace(row.Question))
-			b.WriteString("\n\n")
-			for j, choice := range row.Choices {
-				fmt.Fprintf(&b, "%s. %s\n", letters[j], strings.TrimSpace(choice))
-			}
-			b.WriteString("\nThink step by step briefly, then on the last line write only: Answer: <letter>")
 			prompts = append(prompts, dataset.Prompt{
-				ID:       fmt.Sprintf("mmlu_%04d", len(prompts)+1),
+				ID:       fmt.Sprintf("%s%04d", idPrefix, len(prompts)+1),
 				Category: dataset.MMLU,
-				Text:     b.String(),
+				Text:     choiceQuestion(row.Question, row.Choices),
 				Answer:   letters[row.Answer],
 				Grading:  "choice",
 				Subject:  fmt.Sprintf("%s (test_row_%d)", row.Subject, pr.RowIdx),
 			})
 		}
-		if (i+1)%10 == 0 {
-			log.Printf("mmlu: fetched %d/%d pages", i+1, pages)
+		if pages%10 == 0 {
+			log.Printf("mmlu: fetched %d pages, %d/%d prompts", pages, len(prompts), n)
 		}
 	}
+	if len(prompts) < n {
+		return nil, fmt.Errorf("only %d of %d prompts available after exclusions", len(prompts), n)
+	}
 	return prompts, nil
+}
+
+type arcRowsResponse struct {
+	Rows []struct {
+		RowIdx int `json:"row_idx"`
+		Row    struct {
+			ID       string `json:"id"`
+			Question string `json:"question"`
+			Choices  struct {
+				Text  []string `json:"text"`
+				Label []string `json:"label"`
+			} `json:"choices"`
+			AnswerKey string `json:"answerKey"`
+		} `json:"row"`
+	} `json:"rows"`
+}
+
+// fetchARC downloads the whole ARC-Challenge test split (1172 rows, twelve
+// pages) and samples from it locally, so the draw is uniform over rows.
+// Questions have three to five choices; labels are relettered A to E by
+// position because the source mixes letter and digit labels.
+func fetchARC(c *http.Client, rng *rand.Rand, n int, idPrefix string, excluded map[int]bool) ([]dataset.Prompt, error) {
+	const pageLen = 100
+	type arcRow struct {
+		rowIdx   int
+		question string
+		choices  []string
+		answer   string
+		sourceID string
+	}
+	var rows []arcRow
+	for off := 0; off < arcTestRows; off += pageLen {
+		if off > 0 {
+			time.Sleep(hfPacing)
+		}
+		url := fmt.Sprintf("%s&offset=%d&length=%d", arcRowsURL, off, pageLen)
+		var parsed arcRowsResponse
+		if err := getJSONWithRetry(c, url, &parsed); err != nil {
+			return nil, fmt.Errorf("offset %d: %w", off, err)
+		}
+		for _, pr := range parsed.Rows {
+			r := pr.Row
+			if len(r.Choices.Text) != len(r.Choices.Label) || len(r.Choices.Text) < 2 || len(r.Choices.Text) > len(letters) {
+				return nil, fmt.Errorf("row %d: unexpected choices shape", pr.RowIdx)
+			}
+			answerPos := -1
+			for i, label := range r.Choices.Label {
+				if label == r.AnswerKey {
+					answerPos = i
+				}
+			}
+			if answerPos < 0 {
+				return nil, fmt.Errorf("row %d: answer key %q not among labels", pr.RowIdx, r.AnswerKey)
+			}
+			rows = append(rows, arcRow{rowIdx: pr.RowIdx, question: r.Question, choices: r.Choices.Text, answer: letters[answerPos], sourceID: r.ID})
+		}
+	}
+	if len(rows) != arcTestRows {
+		return nil, fmt.Errorf("expected %d rows, got %d", arcTestRows, len(rows))
+	}
+	log.Printf("arc-challenge test split: %d rows", len(rows))
+
+	chosen := sampleIndices(rng, len(rows), n, excluded)
+	prompts := make([]dataset.Prompt, 0, n)
+	for i, idx := range chosen {
+		r := rows[idx]
+		prompts = append(prompts, dataset.Prompt{
+			ID:       fmt.Sprintf("%s%04d", idPrefix, i+1),
+			Category: dataset.ARC,
+			Text:     choiceQuestion(r.question, r.choices),
+			Answer:   r.answer,
+			Grading:  "choice",
+			Subject:  fmt.Sprintf("%s (test_row_%d)", r.sourceID, r.rowIdx),
+		})
+	}
+	return prompts, nil
+}
+
+func choiceQuestion(question string, choices []string) string {
+	var b strings.Builder
+	b.WriteString(strings.TrimSpace(question))
+	b.WriteString("\n\n")
+	for j, choice := range choices {
+		fmt.Fprintf(&b, "%s. %s\n", letters[j], strings.TrimSpace(choice))
+	}
+	b.WriteString("\nThink step by step briefly, then on the last line write only: Answer: <letter>")
+	return b.String()
 }
 
 func getJSONWithRetry(c *http.Client, url string, out any) error {

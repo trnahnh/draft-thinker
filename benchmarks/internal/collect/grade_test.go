@@ -26,6 +26,8 @@ func TestExtractChoiceAnswer(t *testing.T) {
 		"B. Because of the second law":        "B",
 		"I am not sure":                       "",
 		"**Answer: A**":                       "A",
+		"Answer: E":                           "E",
+		"Answer: F":                           "",
 	}
 	for in, want := range cases {
 		if got := ExtractChoiceAnswer(in); got != want {

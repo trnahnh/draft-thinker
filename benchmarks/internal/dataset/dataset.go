@@ -15,6 +15,7 @@ const (
 	AmbiguousCreative  Category = "ambiguous_creative"
 	GSM8K              Category = "gsm8k"
 	MMLU               Category = "mmlu"
+	ARC                Category = "arc"
 )
 
 var validCategories = map[Category]bool{
@@ -24,6 +25,7 @@ var validCategories = map[Category]bool{
 	AmbiguousCreative:  true,
 	GSM8K:              true,
 	MMLU:               true,
+	ARC:                true,
 }
 
 var validGradings = map[string]bool{
