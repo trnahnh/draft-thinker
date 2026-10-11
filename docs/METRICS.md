@@ -76,21 +76,32 @@ Phase 3 calibration produces offline metrics (not Prometheus). These are generat
 
 ### Threshold Selection
 
-The sweep tool auto-selects the threshold with the highest F1 score among thresholds where draft accuracy >= 95%. Results are written to `benchmarks/results/sweep.csv` with a human-readable summary printed to stdout.
+The sweep tool auto-selects the threshold with the highest F1 score among thresholds where draft accuracy >= 95%. Results are written to `benchmarks/results/sweep.csv` with a human-readable summary printed to stdout. With top-5 logprobs the per-token entropy cannot exceed log2(5) = 2.32 bits, so thresholds of 2.25 and above are effectively unreachable.
 
-### Calibration Results (518 valid prompts, gpt-4.1-nano drafter, gpt-4.1 heavyweight)
+### Calibration Results (519 valid prompts, gpt-4.1-nano drafter, gpt-4.1 heavyweight)
 
-|Threshold|Escalation Rate|Draft Accuracy|Cost Reduction|F1|
+Regenerated from the committed trace with `go run ./benchmarks/cmd/compare` (input and output tokens priced). The earlier table in this section reported 91.6% cost reduction at T=2.0; that figure is not reproducible from any committed trace or code and has been replaced. See `docs/RESULTS.md` section 7.
+
+|Threshold|Escalation Rate|Served Accuracy|Cost Reduction|F1|
 |---|---|---|---|---|
-|1.00|68.9%|100.0%|8.2%|0.06|
-|1.25|49.2%|99.6%|31.0%|0.08|
-|1.50|30.9%|98.6%|56.2%|0.07|
-|1.75|13.9%|98.4%|81.2%|0.10|
-|**2.00**|**6.0%**|**98.2%**|**91.6%**|**0.10**|
-|2.25|0.4%|97.9%|99.0%|0.00|
-|2.50|0.0%|97.9%|99.2%|0.00|
+|1.00|68.0%|100.0%|3.6%|0.06|
+|1.25|48.6%|99.8%|24.4%|0.08|
+|1.50|32.6%|99.0%|46.4%|0.07|
+|1.75|15.6%|98.3%|73.2%|0.04|
+|**2.00**|**7.7%**|**98.1%**|**82.9%**|**0.04**|
+|2.25|0.8%|97.9%|91.9%|0.00|
+|2.50|0.0%|97.9%|92.6%|0.00|
 
-Selected threshold: **T=2.0** (94% draft acceptance, 98.2% accuracy, 91.6% cost reduction).
+Production threshold: **T=2.0** (92.3% draft acceptance, 98.1% served accuracy, 82.9% cost reduction, 95% CI 79.6% to 86.0%). A random router at the same escalation rate reaches 98.1% accuracy at 83.9% cost reduction, and always-drafter reaches 97.9% at 92.6%; the threshold is kept for continuity, not because the sweep shows it adds accuracy.
+
+### Comparison Metrics (benchmarks/cmd/compare)
+
+|Metric|Description|
+|---|---|
+|Overall (served) accuracy|Fraction of all served responses judged acceptable or matching the answer key, counting a wrong heavyweight answer as wrong when ground truth exists|
+|Cost per 1k requests|Estimated USD per 1,000 requests at list pricing, input and output tokens|
+|Latency p50 / p99|Serial-path latency estimated from recorded per-call latencies|
+|AUROC|Threshold-free quality of a routing score as a detector of unacceptable drafts, with bootstrap CI|
 
 ## Phase 4 Metrics
 
@@ -113,7 +124,7 @@ Phase 4 added speculative execution. Three new Prometheus instruments track when
 ### Interpreting Speculative Metrics
 
 - **Trigger rate** = `speculative_triggers_total` / `requests_total`. Healthy range depends on workload; higher means more requests hit the soft threshold.
-- **Cancellation ratio** = `speculative_cancellations_total` / `speculative_triggers_total`. This is wasted compute. Target < 10% of total escalation cost.
+- **Cancellation ratio** = `speculative_cancellations_total` / `speculative_triggers_total`. This is wasted compute. The original target was under 10% of total escalation cost; replaying the recorded traces through the executor measures 93 to 99% at the production soft multiplier, with 70 to 89% of requests triggering (`docs/RESULTS.md` section 11).
 - **Latency saved** = the histogram shows how much head start the heavyweight got before escalation confirmed. Higher values mean more latency eliminated from the user-facing request.
 
 ## Phase 5 Metrics
@@ -140,8 +151,21 @@ Phase 5 adds a new `decision` label value to `routing_decisions_total`:
 
 - `cache_hit`: response served from semantic cache (skips entire draft pipeline)
 
+### Fallback Labels
+
+Graceful degradation (`fallback:` in config) adds two more `decision` values and two `errors_total` types:
+
+|Label|Meaning|
+|---|---|
+|`decision="fallback_heavyweight"`|Drafter failed or timed out; request served by the heavyweight directly|
+|`decision="fallback_draft"`|Heavyweight failed after escalation; drafter re-run and its answer served uncached|
+|`type="drafter_fallback"`|Count of drafter failures that triggered a heavyweight fallback|
+|`type="heavyweight_fallback"`|Count of heavyweight failures that triggered a drafter fallback|
+
+Both decisions are also returned on the `X-Routing-Decision` response header with `X-Fallback-Reason` set to `drafter_error` or `heavyweight_error`.
+
 ### Interpreting Cache Metrics
 
-- **Hit rate** = `cache_hits_total` / (`cache_hits_total` + `cache_misses_total`). Higher means more requests skip the draft pipeline entirely.
+- **Hit rate** = `cache_hits_total` / (`cache_hits_total` + `cache_misses_total`). Higher means more requests skip the draft pipeline entirely. Replayed benchmark traffic measures 0 to 1% on unique prompts and 100% on exact repeats; lookup latency is about 200 ms at p50 because of the embedding call (`docs/RESULTS.md` section 12).
 - **Lookup latency** = dominated by the embedding API call. Target < 50ms for the full lookup (embed + vector search + Redis get).
 - **Cache miss with lazy cleanup** = a vector match was found in Qdrant but the Redis TTL had expired. The orphaned Qdrant point is deleted. Logged as "cache: lazy cleanup of orphaned qdrant point".

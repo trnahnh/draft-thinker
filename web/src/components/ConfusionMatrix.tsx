@@ -15,7 +15,7 @@ export default function ConfusionMatrix() {
         </div>
         <div className="border-r border-b border-(--color-border) bg-(--color-green-dim) p-3 sm:p-5">
           <div className="font-mono text-xl font-medium text-(--color-green) sm:text-2xl">
-            478
+            469
           </div>
           <div className="font-mono text-[10px] text-(--color-text-dark)">
             TN
@@ -23,7 +23,7 @@ export default function ConfusionMatrix() {
         </div>
         <div className="border-b border-(--color-border) bg-(--color-amber-dim) p-3 sm:p-5">
           <div className="font-mono text-xl font-medium text-(--color-amber) sm:text-2xl">
-            29
+            39
           </div>
           <div className="font-mono text-[10px] text-(--color-text-dark)">
             FP
@@ -33,7 +33,7 @@ export default function ConfusionMatrix() {
         <div className="flex items-center border-r border-(--color-border) pr-2" />
         <div className="border-r border-(--color-border) bg-(--color-red-dim) p-3 sm:p-5">
           <div className="font-mono text-xl font-medium text-(--color-red) sm:text-2xl">
-            9
+            10
           </div>
           <div className="font-mono text-[10px] text-(--color-text-dark)">
             FN
@@ -41,7 +41,7 @@ export default function ConfusionMatrix() {
         </div>
         <div className="bg-(--color-green-dim) p-3 sm:p-5">
           <div className="font-mono text-xl font-medium text-(--color-green) sm:text-2xl">
-            2
+            1
           </div>
           <div className="font-mono text-[10px] text-(--color-text-dark)">
             TP
@@ -49,7 +49,7 @@ export default function ConfusionMatrix() {
         </div>
       </div>
       <div className="mt-2 flex justify-between font-mono text-[10px] text-(--color-text-dark)">
-        <span>n=518</span>
+        <span>n=519</span>
         <span>T=2.0 bits</span>
       </div>
     </div>

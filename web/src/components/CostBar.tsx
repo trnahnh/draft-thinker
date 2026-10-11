@@ -1,11 +1,11 @@
 const data = [
-  { t: 1.0, cost: 8.2, acc: 100.0 },
-  { t: 1.25, cost: 31.0, acc: 99.6 },
-  { t: 1.5, cost: 56.2, acc: 98.6 },
-  { t: 1.75, cost: 81.2, acc: 98.4 },
-  { t: 2.0, cost: 91.6, acc: 98.2 },
-  { t: 2.25, cost: 99.0, acc: 97.9 },
-  { t: 2.5, cost: 99.2, acc: 97.9 },
+  { t: 1, cost: 3.6, acc: 100.0 },
+  { t: 1.25, cost: 24.4, acc: 99.8 },
+  { t: 1.5, cost: 46.4, acc: 99.0 },
+  { t: 1.75, cost: 73.2, acc: 98.3 },
+  { t: 2, cost: 82.9, acc: 98.1 },
+  { t: 2.25, cost: 91.9, acc: 97.9 },
+  { t: 2.5, cost: 92.6, acc: 97.9 },
 ];
 
 export default function CostBar() {

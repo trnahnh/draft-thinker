@@ -39,6 +39,26 @@ type TokenEntropy struct {
 	Entropy float64
 	Logprob float64
 	Index   int
+	InTopK  bool
+}
+
+// sentinelLogprob is the value OpenAI reports for a sampled token that was
+// not among the requested top-k alternatives.
+const sentinelLogprob = -9999.0
+
+func sampledInTopK(tl protocol.TokenLogprob) bool {
+	if tl.Logprob <= sentinelLogprob {
+		return false
+	}
+	if len(tl.TopLogprobs) == 0 {
+		return true
+	}
+	for _, entry := range tl.TopLogprobs {
+		if entry.Token == tl.Token {
+			return true
+		}
+	}
+	return false
 }
 
 func ExtractTokenEntropy(chunk *protocol.StreamChunk, index int) []TokenEntropy {
@@ -64,6 +84,7 @@ func ExtractTokenEntropy(chunk *protocol.StreamChunk, index int) []TokenEntropy 
 				Entropy: ComputeEntropy(logprobs),
 				Logprob: tl.Logprob,
 				Index:   index,
+				InTopK:  sampledInTopK(tl),
 			})
 			index++
 		}

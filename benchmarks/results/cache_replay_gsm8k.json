@@ -1,0 +1,21 @@
+{
+  "input": "benchmarks/results/collected_gsm8k.jsonl.gz",
+  "records": 300,
+  "similarity_threshold": 0.95,
+  "embedding_model": "text-embedding-3-small",
+  "inserted_accepted_drafts": 284,
+  "hits": 0,
+  "hit_rate": 0,
+  "hits_wrong_for_new_prompt": 0,
+  "hits_with_ground_truth": 0,
+  "nearest_similarity_quantiles": {
+    "p100": 0.7629351053233459,
+    "p50": 0.6003358683505332,
+    "p90": 0.6786816205305972,
+    "p99": 0.7312619973898822
+  },
+  "prompts_with_neighbour_above": {},
+  "wrong_answer_hits_if_threshold_were": {},
+  "lookup_p50_ms": 199.237,
+  "lookup_p99_ms": 406.492
+}

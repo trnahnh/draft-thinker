@@ -18,6 +18,16 @@ import (
 	"github.com/trnahnh/draft-thinker/pkg/protocol"
 )
 
+// Routing decision labels exposed on X-Routing-Decision and the
+// routing_decisions_total metric.
+const (
+	decisionAccept              = "accept"
+	decisionEscalate            = "escalate"
+	decisionCacheHit            = "cache_hit"
+	decisionFallbackHeavyweight = "fallback_heavyweight"
+	decisionFallbackDraft       = "fallback_draft"
+)
+
 type chatHandler struct {
 	drafter     client.LLMClient
 	heavyweight client.LLMClient
@@ -26,10 +36,11 @@ type chatHandler struct {
 	recorder    metrics.Recorder
 	entropyCfg  config.EntropyConfig
 	specCfg     config.SpeculativeConfig
+	fallbackCfg config.FallbackConfig
 	cache       cache.Store
 }
 
-func newChatHandler(drafter, heavyweight client.LLMClient, rtr *router.Router, exec *speculative.Executor, rec metrics.Recorder, entropyCfg config.EntropyConfig, specCfg config.SpeculativeConfig, cacheStore cache.Store) *chatHandler {
+func newChatHandler(drafter, heavyweight client.LLMClient, rtr *router.Router, exec *speculative.Executor, rec metrics.Recorder, entropyCfg config.EntropyConfig, specCfg config.SpeculativeConfig, fallbackCfg config.FallbackConfig, cacheStore cache.Store) *chatHandler {
 	return &chatHandler{
 		drafter:     drafter,
 		heavyweight: heavyweight,
@@ -38,6 +49,7 @@ func newChatHandler(drafter, heavyweight client.LLMClient, rtr *router.Router, e
 		recorder:    rec,
 		entropyCfg:  entropyCfg,
 		specCfg:     specCfg,
+		fallbackCfg: fallbackCfg,
 		cache:       cacheStore,
 	}
 }
@@ -70,7 +82,7 @@ func (h *chatHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			log.Printf("cache lookup error: %v", err)
 		} else if resp != nil {
-			h.recorder.RecordRoutingDecision("cache_hit")
+			h.recorder.RecordRoutingDecision(decisionCacheHit)
 			h.recorder.RecordRequest(resp.Model, http.StatusOK)
 			if req.Stream {
 				flusher, ok := w.(http.Flusher)
@@ -78,12 +90,11 @@ func (h *chatHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					writeInternalError(w, "streaming not supported")
 					return
 				}
-				setRoutingHeaders(w, "cache_hit", start)
+				setRoutingHeaders(w, decisionCacheHit, start)
 				h.replayCachedSSE(w, flusher, resp)
 			} else {
-				setRoutingHeaders(w, "cache_hit", start)
-				w.Header().Set("Content-Type", "application/json")
-				json.NewEncoder(w).Encode(resp)
+				setRoutingHeaders(w, decisionCacheHit, start)
+				writeJSON(w, resp)
 			}
 			return
 		}
@@ -105,30 +116,25 @@ func (h *chatHandler) handleComplete(w http.ResponseWriter, r *http.Request, req
 }
 
 func (h *chatHandler) handleCompleteSerial(w http.ResponseWriter, r *http.Request, req *protocol.ChatCompletionRequest, start time.Time) {
-
 	drafterReq := h.cloneForDrafter(req)
 
 	ch, err := h.drafter.Stream(r.Context(), drafterReq)
 	if err != nil {
-		elapsed := time.Since(start)
-		h.recorder.RecordUpstreamLatency("drafter", elapsed)
-		h.handleUpstreamError(w, err)
+		h.recorder.RecordUpstreamLatency("drafter", time.Since(start))
+		h.drafterFailed(w, r, req, start, err)
 		return
 	}
 
 	result, err := h.router.Route(r.Context(), ch)
-	elapsed := time.Since(start)
-	h.recorder.RecordUpstreamLatency("drafter", elapsed)
+	h.recorder.RecordUpstreamLatency("drafter", time.Since(start))
 
 	if err != nil {
-		h.recorder.RecordError("routing_error")
-		writeInternalError(w, "routing error")
-		log.Printf("routing error: %v", err)
+		h.drafterFailed(w, r, req, start, err)
 		return
 	}
 
 	if result.Decision == entropy.Escalate {
-		h.recorder.RecordRoutingDecision("escalate")
+		h.recorder.RecordRoutingDecision(decisionEscalate)
 		log.Printf("escalating to heavyweight (tokens=%d, avg_entropy=%.3f)",
 			result.TokenCount, avgEntropy(result.Entropies))
 
@@ -137,34 +143,31 @@ func (h *chatHandler) handleCompleteSerial(w http.ResponseWriter, r *http.Reques
 		h.recorder.RecordUpstreamLatency("heavyweight", time.Since(hvStart))
 
 		if err != nil {
-			h.handleUpstreamError(w, err)
+			h.heavyweightFailed(w, r, req, start, err, false)
 			return
 		}
 
 		h.recorder.RecordRequest(resp.Model, http.StatusOK)
-		setRoutingHeaders(w, "escalate", start)
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(resp)
+		setRoutingHeaders(w, decisionEscalate, start)
+		writeJSON(w, resp)
 		return
 	}
 
-	h.recorder.RecordRoutingDecision("accept")
+	h.recorder.RecordRoutingDecision(decisionAccept)
 	resp := assembleResponse(result.DraftChunks)
 	h.cacheInsert(req.Messages, resp)
 	h.recorder.RecordRequest(resp.Model, http.StatusOK)
-	setRoutingHeaders(w, "accept", start)
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(resp)
+	setRoutingHeaders(w, decisionAccept, start)
+	writeJSON(w, resp)
 }
 
 func (h *chatHandler) handleCompleteSpeculative(w http.ResponseWriter, r *http.Request, req *protocol.ChatCompletionRequest, start time.Time) {
-
 	drafterReq := h.cloneForDrafter(req)
 
 	ch, err := h.drafter.Stream(r.Context(), drafterReq)
 	if err != nil {
 		h.recorder.RecordUpstreamLatency("drafter", time.Since(start))
-		h.handleUpstreamError(w, err)
+		h.drafterFailed(w, r, req, start, err)
 		return
 	}
 
@@ -172,15 +175,13 @@ func (h *chatHandler) handleCompleteSpeculative(w http.ResponseWriter, r *http.R
 	h.recorder.RecordUpstreamLatency("drafter", time.Since(start))
 
 	if err != nil {
-		h.recorder.RecordError("routing_error")
-		writeInternalError(w, "routing error")
-		log.Printf("speculative routing error: %v", err)
+		h.drafterFailed(w, r, req, start, err)
 		return
 	}
 
 	switch result.State {
 	case speculative.Escalated:
-		h.recorder.RecordRoutingDecision("escalate")
+		h.recorder.RecordRoutingDecision(decisionEscalate)
 		log.Printf("escalating to heavyweight (tokens=%d, avg_entropy=%.3f)",
 			result.TokenCount, avgEntropy(result.Entropies))
 
@@ -189,9 +190,7 @@ func (h *chatHandler) handleCompleteSpeculative(w http.ResponseWriter, r *http.R
 			var hvChunks []protocol.StreamChunk
 			for sc := range result.HeavyCh {
 				if sc.Err != nil {
-					h.recorder.RecordError("stream_error")
-					log.Printf("speculative heavyweight stream error: %v", sc.Err)
-					writeInternalError(w, "heavyweight stream error")
+					h.heavyweightFailed(w, r, req, start, sc.Err, false)
 					return
 				}
 				if sc.Chunk != nil {
@@ -200,9 +199,8 @@ func (h *chatHandler) handleCompleteSpeculative(w http.ResponseWriter, r *http.R
 			}
 			resp := assembleResponse(hvChunks)
 			h.recorder.RecordRequest(resp.Model, http.StatusOK)
-			setRoutingHeaders(w, "escalate", start)
-			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(resp)
+			setRoutingHeaders(w, decisionEscalate, start)
+			writeJSON(w, resp)
 			return
 		}
 
@@ -210,22 +208,20 @@ func (h *chatHandler) handleCompleteSpeculative(w http.ResponseWriter, r *http.R
 		resp, err := h.heavyweight.Complete(r.Context(), req)
 		h.recorder.RecordUpstreamLatency("heavyweight", time.Since(hvStart))
 		if err != nil {
-			h.handleUpstreamError(w, err)
+			h.heavyweightFailed(w, r, req, start, err, false)
 			return
 		}
 		h.recorder.RecordRequest(resp.Model, http.StatusOK)
-		setRoutingHeaders(w, "escalate", start)
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(resp)
+		setRoutingHeaders(w, decisionEscalate, start)
+		writeJSON(w, resp)
 
 	default:
-		h.recorder.RecordRoutingDecision("accept")
+		h.recorder.RecordRoutingDecision(decisionAccept)
 		resp := assembleResponse(result.DraftChunks)
 		h.cacheInsert(req.Messages, resp)
 		h.recorder.RecordRequest(resp.Model, http.StatusOK)
-		setRoutingHeaders(w, "accept", start)
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(resp)
+		setRoutingHeaders(w, decisionAccept, start)
+		writeJSON(w, resp)
 	}
 }
 
@@ -238,25 +234,20 @@ func (h *chatHandler) handleStream(w http.ResponseWriter, r *http.Request, req *
 }
 
 func (h *chatHandler) handleStreamSerial(w http.ResponseWriter, r *http.Request, req *protocol.ChatCompletionRequest, start time.Time) {
-
 	drafterReq := h.cloneForDrafter(req)
 
 	ch, err := h.drafter.Stream(r.Context(), drafterReq)
 	if err != nil {
-		elapsed := time.Since(start)
-		h.recorder.RecordUpstreamLatency("drafter", elapsed)
-		h.handleUpstreamError(w, err)
+		h.recorder.RecordUpstreamLatency("drafter", time.Since(start))
+		h.drafterFailed(w, r, req, start, err)
 		return
 	}
 
 	result, err := h.router.Route(r.Context(), ch)
-	elapsed := time.Since(start)
-	h.recorder.RecordUpstreamLatency("drafter", elapsed)
+	h.recorder.RecordUpstreamLatency("drafter", time.Since(start))
 
 	if err != nil {
-		h.recorder.RecordError("routing_error")
-		writeInternalError(w, "routing error")
-		log.Printf("routing error: %v", err)
+		h.drafterFailed(w, r, req, start, err)
 		return
 	}
 
@@ -267,7 +258,7 @@ func (h *chatHandler) handleStreamSerial(w http.ResponseWriter, r *http.Request,
 	}
 
 	if result.Decision == entropy.Escalate {
-		h.recorder.RecordRoutingDecision("escalate")
+		h.recorder.RecordRoutingDecision(decisionEscalate)
 		log.Printf("escalating to heavyweight (tokens=%d, avg_entropy=%.3f)",
 			result.TokenCount, avgEntropy(result.Entropies))
 
@@ -275,32 +266,30 @@ func (h *chatHandler) handleStreamSerial(w http.ResponseWriter, r *http.Request,
 		hvCh, err := h.heavyweight.Stream(r.Context(), req)
 		if err != nil {
 			h.recorder.RecordUpstreamLatency("heavyweight", time.Since(hvStart))
-			h.handleUpstreamError(w, err)
+			h.heavyweightFailed(w, r, req, start, err, true)
 			return
 		}
 
-		setRoutingHeaders(w, "escalate", start)
-		h.streamSSE(w, flusher, hvCh, func() {
+		h.streamHeavyweight(w, r, req, flusher, start, hvCh, func() {
 			h.recorder.RecordUpstreamLatency("heavyweight", time.Since(hvStart))
 		})
 		return
 	}
 
-	h.recorder.RecordRoutingDecision("accept")
+	h.recorder.RecordRoutingDecision(decisionAccept)
 	resp := assembleResponse(result.DraftChunks)
 	h.cacheInsert(req.Messages, resp)
-	setRoutingHeaders(w, "accept", start)
+	setRoutingHeaders(w, decisionAccept, start)
 	h.replayDraftSSE(w, flusher, result.DraftChunks)
 }
 
 func (h *chatHandler) handleStreamSpeculative(w http.ResponseWriter, r *http.Request, req *protocol.ChatCompletionRequest, start time.Time) {
-
 	drafterReq := h.cloneForDrafter(req)
 
 	ch, err := h.drafter.Stream(r.Context(), drafterReq)
 	if err != nil {
 		h.recorder.RecordUpstreamLatency("drafter", time.Since(start))
-		h.handleUpstreamError(w, err)
+		h.drafterFailed(w, r, req, start, err)
 		return
 	}
 
@@ -308,9 +297,7 @@ func (h *chatHandler) handleStreamSpeculative(w http.ResponseWriter, r *http.Req
 	h.recorder.RecordUpstreamLatency("drafter", time.Since(start))
 
 	if err != nil {
-		h.recorder.RecordError("routing_error")
-		writeInternalError(w, "routing error")
-		log.Printf("speculative routing error: %v", err)
+		h.drafterFailed(w, r, req, start, err)
 		return
 	}
 
@@ -325,14 +312,13 @@ func (h *chatHandler) handleStreamSpeculative(w http.ResponseWriter, r *http.Req
 
 	switch result.State {
 	case speculative.Escalated:
-		h.recorder.RecordRoutingDecision("escalate")
+		h.recorder.RecordRoutingDecision(decisionEscalate)
 		log.Printf("escalating to heavyweight (tokens=%d, avg_entropy=%.3f)",
 			result.TokenCount, avgEntropy(result.Entropies))
 
 		if result.HeavyCh != nil {
 			defer result.HeavyCancel()
-			setRoutingHeaders(w, "escalate", start)
-			h.streamSSE(w, flusher, result.HeavyCh, nil)
+			h.streamHeavyweight(w, r, req, flusher, start, result.HeavyCh, nil)
 			return
 		}
 
@@ -340,21 +326,146 @@ func (h *chatHandler) handleStreamSpeculative(w http.ResponseWriter, r *http.Req
 		hvCh, err := h.heavyweight.Stream(r.Context(), req)
 		if err != nil {
 			h.recorder.RecordUpstreamLatency("heavyweight", time.Since(hvStart))
-			h.handleUpstreamError(w, err)
+			h.heavyweightFailed(w, r, req, start, err, true)
 			return
 		}
-		setRoutingHeaders(w, "escalate", start)
-		h.streamSSE(w, flusher, hvCh, func() {
+		h.streamHeavyweight(w, r, req, flusher, start, hvCh, func() {
 			h.recorder.RecordUpstreamLatency("heavyweight", time.Since(hvStart))
 		})
 
 	default:
-		h.recorder.RecordRoutingDecision("accept")
+		h.recorder.RecordRoutingDecision(decisionAccept)
 		resp := assembleResponse(result.DraftChunks)
 		h.cacheInsert(req.Messages, resp)
-		setRoutingHeaders(w, "accept", start)
+		setRoutingHeaders(w, decisionAccept, start)
 		h.replayDraftSSE(w, flusher, result.DraftChunks)
 	}
+}
+
+// drafterFailed handles a drafter call that errored or timed out before a
+// routing decision could be made. With fallback enabled the request is
+// sent straight to the heavyweight so the client still gets an answer;
+// otherwise the upstream error is surfaced as before.
+func (h *chatHandler) drafterFailed(w http.ResponseWriter, r *http.Request, req *protocol.ChatCompletionRequest, start time.Time, err error) {
+	if !h.fallbackCfg.OnDrafterErrorEnabled() {
+		h.handleUpstreamError(w, err)
+		return
+	}
+
+	h.recorder.RecordError("drafter_fallback")
+	h.recorder.RecordRoutingDecision(decisionFallbackHeavyweight)
+	log.Printf("drafter failed, falling back to heavyweight: %v", err)
+
+	hvStart := time.Now()
+	if req.Stream {
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			writeInternalError(w, "streaming not supported")
+			return
+		}
+		hvCh, err := h.heavyweight.Stream(r.Context(), req)
+		if err != nil {
+			h.recorder.RecordUpstreamLatency("heavyweight", time.Since(hvStart))
+			h.handleUpstreamError(w, err)
+			return
+		}
+		setRoutingHeaders(w, decisionFallbackHeavyweight, start)
+		w.Header().Set("X-Fallback-Reason", "drafter_error")
+		h.streamSSE(w, flusher, hvCh, func() {
+			h.recorder.RecordUpstreamLatency("heavyweight", time.Since(hvStart))
+		})
+		return
+	}
+
+	resp, err := h.heavyweight.Complete(r.Context(), req)
+	h.recorder.RecordUpstreamLatency("heavyweight", time.Since(hvStart))
+	if err != nil {
+		h.handleUpstreamError(w, err)
+		return
+	}
+	h.recorder.RecordRequest(resp.Model, http.StatusOK)
+	setRoutingHeaders(w, decisionFallbackHeavyweight, start)
+	w.Header().Set("X-Fallback-Reason", "drafter_error")
+	writeJSON(w, resp)
+}
+
+// heavyweightFailed handles a heavyweight call that errored after the
+// router decided to escalate. The draft collected so far is usually
+// partial (escalation aborts the drafter stream), so with fallback enabled
+// the drafter is re-run to completion and that answer is served as a
+// degraded, uncached response flagged via X-Routing-Decision. If the
+// drafter also fails, the original heavyweight error is surfaced.
+func (h *chatHandler) heavyweightFailed(w http.ResponseWriter, r *http.Request, req *protocol.ChatCompletionRequest, start time.Time, hvErr error, stream bool) {
+	if !h.fallbackCfg.ServeDraftOnHeavyErrorEnabled() {
+		h.handleUpstreamError(w, hvErr)
+		return
+	}
+
+	h.recorder.RecordError("heavyweight_fallback")
+	log.Printf("heavyweight failed after escalation, re-running drafter: %v", hvErr)
+
+	drafterReq := h.cloneForDrafter(req)
+	ch, err := h.drafter.Stream(r.Context(), drafterReq)
+	if err != nil {
+		log.Printf("drafter fallback also failed: %v", err)
+		h.handleUpstreamError(w, hvErr)
+		return
+	}
+	var chunks []protocol.StreamChunk
+	for sc := range ch {
+		if sc.Err != nil {
+			log.Printf("drafter fallback stream failed: %v", sc.Err)
+			h.handleUpstreamError(w, hvErr)
+			return
+		}
+		if sc.Chunk != nil {
+			chunks = append(chunks, *sc.Chunk)
+		}
+	}
+	if len(chunks) == 0 {
+		h.handleUpstreamError(w, hvErr)
+		return
+	}
+
+	h.recorder.RecordRoutingDecision(decisionFallbackDraft)
+	resp := assembleResponse(chunks)
+	setRoutingHeaders(w, decisionFallbackDraft, start)
+	w.Header().Set("X-Fallback-Reason", "heavyweight_error")
+
+	if flusher, ok := w.(http.Flusher); ok && stream {
+		h.replayDraftSSE(w, flusher, chunks)
+		return
+	}
+	h.recorder.RecordRequest(resp.Model, http.StatusOK)
+	writeJSON(w, resp)
+}
+
+// streamHeavyweight waits for the first heavyweight chunk before committing
+// to an SSE response. If the stream fails before producing anything the
+// request can still fall back to the drafter; once bytes have been written
+// the only option is to end the stream.
+func (h *chatHandler) streamHeavyweight(w http.ResponseWriter, r *http.Request, req *protocol.ChatCompletionRequest, flusher http.Flusher, start time.Time, hvCh <-chan client.StreamChunk, onFirstChunk func()) {
+	first, ok := <-hvCh
+	if !ok {
+		h.heavyweightFailed(w, r, req, start, fmt.Errorf("heavyweight stream closed without data"), true)
+		return
+	}
+	if first.Err != nil {
+		h.heavyweightFailed(w, r, req, start, first.Err, true)
+		return
+	}
+
+	merged := make(chan client.StreamChunk, 1)
+	merged <- first
+	go func() {
+		defer close(merged)
+		for sc := range hvCh {
+			merged <- sc
+		}
+	}()
+
+	setRoutingHeaders(w, decisionEscalate, start)
+	h.streamSSE(w, flusher, merged, onFirstChunk)
 }
 
 func (h *chatHandler) streamSSE(w http.ResponseWriter, flusher http.Flusher, ch <-chan client.StreamChunk, onFirstChunk func()) {
@@ -502,6 +613,11 @@ func (h *chatHandler) replayCachedSSE(w http.ResponseWriter, flusher http.Flushe
 
 	fmt.Fprint(w, "data: [DONE]\n\n")
 	flusher.Flush()
+}
+
+func writeJSON(w http.ResponseWriter, v any) {
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(v)
 }
 
 func setRoutingHeaders(w http.ResponseWriter, decision string, start time.Time) {

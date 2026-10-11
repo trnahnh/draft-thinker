@@ -11,9 +11,9 @@ type ReplayConfig struct {
 }
 
 type ReplayResult struct {
-	WouldEscalate  bool
+	WouldEscalate   bool
 	EscalateAtToken int
-	TokensConsumed int
+	TokensConsumed  int
 }
 
 func Replay(tokens []collect.TokenRecord, threshold float64, cfg ReplayConfig) ReplayResult {

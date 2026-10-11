@@ -34,6 +34,10 @@ cache:
   embedding_dimensions: 1536
   qdrant_collection: draftthinker_cache
 
+fallback:
+  on_drafter_error: true
+  serve_draft_on_heavy_error: true
+
 metrics:
   enabled: true
   path: /metrics

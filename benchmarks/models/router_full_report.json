@@ -1,0 +1,110 @@
+{
+ "train_file": "benchmarks/results/features_train.csv",
+ "records": 600,
+ "positives": 95,
+ "folds": 5,
+ "seed": 42,
+ "prefix_tokens": 0,
+ "oof_auroc": {
+  "window_peak": {
+   "auroc": 0.5342991141219386,
+   "ci_lower": 0.47558871636306604,
+   "ci_upper": 0.5963343864130313,
+   "note": "single feature, no fitting"
+  },
+  "mean_entropy": {
+   "auroc": 0.7444085461177696,
+   "ci_lower": 0.6935284658945259,
+   "ci_upper": 0.7933671160980906,
+   "note": "single feature, no fitting"
+  },
+  "neg_min_logprob": {
+   "auroc": 0.5802813965607087,
+   "ci_lower": 0.5202284408909195,
+   "ci_upper": 0.6410520561769406,
+   "note": "single feature, no fitting"
+  },
+  "logistic": {
+   "auroc": 0.7652318916102135,
+   "ci_lower": 0.7155253412922126,
+   "ci_upper": 0.8142082247077621,
+   "note": "5-fold out-of-fold"
+  },
+  "gbt": {
+   "auroc": 0.7454715997915582,
+   "ci_lower": 0.6931172952783954,
+   "ci_upper": 0.7952311738648947,
+   "note": "5-fold out-of-fold"
+  }
+ },
+ "models": {
+  "logistic": {
+   "path": "benchmarks/models\\router_full_logistic.json",
+   "operating_points": [
+    {
+     "name": "served_error_le_0.05",
+     "target": 0.05,
+     "tau": -1.0,
+     "description": "largest acceptance set with corrected served error <= 5% on calibration folds; unattainable, always escalate",
+     "calibration_rate": null
+    },
+    {
+     "name": "served_error_le_0.08",
+     "target": 0.08,
+     "tau": 0.08163265306122448,
+     "description": "largest acceptance set with corrected served error <= 8% on calibration folds",
+     "calibration_rate": 0.07986688851913477
+    },
+    {
+     "name": "served_error_le_0.10",
+     "target": 0.1,
+     "tau": 0.3125,
+     "description": "largest acceptance set with corrected served error <= 10% on calibration folds",
+     "calibration_rate": 0.09983361064891846
+    },
+    {
+     "name": "served_error_le_0.12",
+     "target": 0.12,
+     "tau": 0.31313131313131315,
+     "description": "largest acceptance set with corrected served error <= 12% on calibration folds",
+     "calibration_rate": 0.11980033277870217
+    }
+   ],
+   "calibration_breakpoints": 28
+  },
+  "gbt": {
+   "path": "benchmarks/models\\router_full_gbt.json",
+   "operating_points": [
+    {
+     "name": "served_error_le_0.05",
+     "target": 0.05,
+     "tau": -1.0,
+     "description": "largest acceptance set with corrected served error <= 5% on calibration folds; unattainable, always escalate",
+     "calibration_rate": null
+    },
+    {
+     "name": "served_error_le_0.08",
+     "target": 0.08,
+     "tau": 0.09142857142857143,
+     "description": "largest acceptance set with corrected served error <= 8% on calibration folds",
+     "calibration_rate": 0.07986688851913477
+    },
+    {
+     "name": "served_error_le_0.10",
+     "target": 0.1,
+     "tau": 0.22784810126582278,
+     "description": "largest acceptance set with corrected served error <= 10% on calibration folds",
+     "calibration_rate": 0.09983361064891846
+    },
+    {
+     "name": "served_error_le_0.12",
+     "target": 0.12,
+     "tau": 0.2619047619047619,
+     "description": "largest acceptance set with corrected served error <= 12% on calibration folds",
+     "calibration_rate": 0.11980033277870217
+    }
+   ],
+   "calibration_breakpoints": 22
+  }
+ }
+}

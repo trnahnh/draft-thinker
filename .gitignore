@@ -34,9 +34,9 @@ go.work.sum
 CLAUDE.md
 
 benchmarks/results/*.jsonl
-benchmarks/results/*.csv
+benchmarks/results/*.bak
 
 web/node_modules/
 web/.next/
 web/.env.local
-config.loadtest.yaml
+
