@@ -81,9 +81,9 @@ export default function Home() {
             accent="cyan"
           />
           <Metric
-            value="109ms"
+            value="107ms"
             label="P99 Latency"
-            sublabel="draft path, 50 req/s"
+            sublabel="accept path, 50 req/s, mock upstream"
           />
         </div>
 

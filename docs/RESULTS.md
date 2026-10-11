@@ -218,7 +218,39 @@ locally served open model.
 
 ### 8.1 Open model (qwen2.5-coder:7b via Ollama)
 
-Pending: filled in from `benchmarks/results/collected_qwen2.5-coder-7b.jsonl.gz`.
+200 prompts (50 per category) collected drafter-only against a local Ollama
+server with top-5 logprobs and a 512-token cap (33 responses hit the cap).
+56,032 tokens. No heavyweight or judge, so there is no accuracy here; this
+section is about the signal, not the router.
+
+| Measure | gpt-4.1-nano (OpenAI) | qwen2.5-coder:7b (Ollama) |
+|---|---|---|
+| Sentinel `-9999` logprobs | present | none; minimum reported logprob -12.47 |
+| Sampled token outside top-5, share of tokens | 0.49% creative, 0.01% code, 0.04% reasoning, 0.00% factual | 7.18% creative, 1.06% code, 0.70% reasoning, 1.01% factual |
+| Records with at least one such token | 65.5% creative, 5.5% code, 12.8% reasoning, 0.0% factual | 100% creative, 84% code, 68% reasoning, 10% factual |
+| Logprob of those tokens | unknown (masked by sentinel) | median -4.42, p10 -6.43, p90 -3.18 |
+| Min-logprob router escalation at -5 / -8 / -10 / -15 | 47.0% / 22.4% / 19.3% / 18.7% (hard floor) | 61.5% / 15.5% / 2.0% / 0.0% |
+| Entropy router escalation at T=2.0 | 7.7% | 24.5% |
+
+Reading: the underlying event (the sampled token was not among the top five
+alternatives) is common on any model that samples at temperature, far more
+so on this one than the OpenAI drafter. What is specific to OpenAI is the
+encoding: a sentinel that destroys the value. Because Ollama reports the real
+logprob, the min-logprob baseline has no ceiling on the open model and can
+be tuned all the way to 0% escalation. The confidence-threshold ceiling
+reported in section 8 is therefore an API artifact, not a property of
+logprob-based routing. Two of the 1,788 flagged tokens have logprob near 0;
+they are byte-split Unicode fragments whose string form does not match the
+alternatives list, a detection limitation rather than a sampling event.
+
+The entropy router at T=2.0 would escalate 24.5% of this model's drafts
+against 7.7% for the OpenAI drafter, and mean entropy on creative prompts is
+1.07 bits against 0.57 overall. A threshold calibrated on one drafter does
+not transfer to another; each drafter needs its own sweep.
+
+Comparison outputs: `benchmarks/results/compare_qwen.csv` (accuracy columns
+are meaningless for this unlabeled set; escalation rates and the artifact
+table are the point).
 
 ## 9. Reproducing
 
