@@ -21,7 +21,7 @@ confidence_threshold,-12.0000,mmlu,300,69,0.2300,0.8182,0.8167,0.6264
 confidence_threshold,-15.0000,mmlu,300,69,0.2300,0.8182,0.8167,0.6264
 confidence_threshold,-20.0000,mmlu,300,69,0.2300,0.8182,0.8167,0.6264
 confidence_threshold,-40.0000,mmlu,300,69,0.2300,0.8182,0.8167,0.6264
-mean_entropy_router,0.7704,mmlu,300,55,0.1833,0.7878,0.7933,0.7214
+mean_entropy_router,0.7700,mmlu,300,56,0.1867,0.7869,0.7933,0.7188
 random_matched_rate,0.1867,mmlu,300,56,0.1867,0.7418,0.7667,0.7482
 always_drafter,0.0000,mmlu,300,0,0.0000,0.7567,0.7567,0.9266
 always_heavyweight,0.0000,mmlu,300,300,1.0000,0.0000,0.8967,0.0000

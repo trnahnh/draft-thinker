@@ -1,6 +1,7 @@
 package sweep
 
 import (
+	"math"
 	"math/rand"
 	"sort"
 
@@ -75,9 +76,10 @@ func HighEntropyFraction(bits float64) ScoreFunc {
 }
 
 // ThresholdForRate returns the score threshold at which escalating when
-// score > threshold yields approximately the requested escalation rate on
-// the given records. It is the (1-rate) quantile of the score, which makes
-// rate-matched comparisons between scores deterministic.
+// score > threshold yields the requested escalation rate on the given
+// records (up to ties): the round(rate*n) highest-scoring records sit
+// strictly above it. This makes rate-matched comparisons between scores
+// deterministic.
 func ThresholdForRate(records []*collect.Record, score ScoreFunc, rate float64) float64 {
 	vals := make([]float64, 0, len(records))
 	for _, r := range records {
@@ -85,18 +87,20 @@ func ThresholdForRate(records []*collect.Record, score ScoreFunc, rate float64) 
 			vals = append(vals, score(r))
 		}
 	}
-	if len(vals) == 0 {
+	n := len(vals)
+	if n == 0 {
 		return 0
 	}
 	sort.Float64s(vals)
-	k := int(float64(len(vals)) * (1 - rate))
-	if k >= len(vals) {
-		k = len(vals) - 1
+	m := int(math.Round(rate * float64(n)))
+	switch {
+	case m <= 0:
+		return vals[n-1]
+	case m >= n:
+		return vals[0] - 1
+	default:
+		return vals[n-m-1]
 	}
-	if k < 0 {
-		k = 0
-	}
-	return vals[k]
 }
 
 // AUROC computes the area under the ROC curve for score as a detector of
