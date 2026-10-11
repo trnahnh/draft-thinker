@@ -56,7 +56,9 @@ The gateway routes requests to either the drafter or heavyweight model based on 
 
 ### Phase 3 exit criteria
 
-> "At threshold T=2.0, the system routes 94% of requests to the drafter with 98.2% accuracy, reducing cost by 91.6% vs. baseline."
+> "At threshold T=2.0, the system routes 92.3% of requests to the drafter with 98.1% served accuracy, reducing measured cost by 82.9% (95% CI 79.6% to 86.0%) vs. baseline."
+
+The originally recorded figures (94%, 98.2%, 91.6%) could not be regenerated from any committed trace; see `docs/RESULTS.md` section 7.
 
 ---
 
@@ -127,6 +129,28 @@ The project is deployed, documented, and you can walk an interviewer through eve
 
 ---
 
+## Phase 7 -Evaluation Hardening & Failure Handling [COMPLETE]
+
+**Goal:** Make every published number reproducible from the repository and make the gateway degrade gracefully when a provider fails.
+
+### Phase 7 deliverables
+
+- Frozen trace files committed (`benchmarks/results/*.jsonl.gz`) so every sweep replays offline
+- Cost model prices input tokens; `-output-only-pricing` reproduces the old model
+- Baselines: always-drafter, rate-matched random, oracle, mean-entropy router, min-logprob confidence threshold
+- Threshold-free AUROC with bootstrap CIs for each routing score
+- Public benchmark subsets with answer keys (GSM8K, MMLU, 300 prompts each, seeded) graded by exact match for both models
+- Provider-neutral `outside_top_k` token flag and a drafter-only collection mode for local OpenAI-compatible servers
+- Fallbacks: drafter failure routes to the heavyweight; heavyweight failure after escalation re-runs the drafter; both configurable, both tested
+- Load test `flaky` scenario injecting drafter 503s and stalls, with routing-decision tallies
+- Documentation rewritten around the reproducible numbers, including the negative results
+
+### Phase 7 exit criteria
+
+Every number in `README.md`, `docs/RESULTS.md`, `docs/METRICS.md` and the showcase site is produced by a documented command from committed data, and a drafter outage during the flaky load test produces no 5xx responses.
+
+---
+
 ## Timeline Summary
 
 |Week|Phase|Key Deliverable|
@@ -137,5 +161,6 @@ The project is deployed, documented, and you can walk an interviewer through eve
 |6|Speculative Execution|Parallel escalation with cancellation|
 |7|Semantic Cache|Vector-based response caching|
 |8|Hardening|Dashboard, load tests, documentation|
+|9|Evaluation hardening|Reproducible traces, public benchmarks, honest baselines, provider fallbacks|
 
 **Note:** Parallelizable with Ferrox development if phases are staggered. Phase 1–2 can overlap with Ferrox Phase 5–6.

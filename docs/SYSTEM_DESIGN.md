@@ -6,7 +6,7 @@
 
 ## 1. Overview
 
-Draft-Thinker is a stateful reverse proxy that sits between clients and LLM providers. It reduces inference costs by 91.6% by routing requests through a fast, cheap drafter model first, analyzing the drafter's token-level confidence via Shannon entropy, and only escalating to expensive frontier models when the drafter demonstrates high uncertainty.
+Draft-Thinker is a stateful reverse proxy that sits between clients and LLM providers. It routes requests through a fast, cheap drafter model first, analyzes the drafter's token-level confidence via Shannon entropy, and escalates to an expensive frontier model when the drafter demonstrates high uncertainty. On the committed 519-prompt benchmark this cuts measured inference cost by 82.9% (95% CI 79.6% to 86.0%) at 98.1% served accuracy; see `docs/RESULTS.md` for the baselines that qualify that number.
 
 ```text
 Client
@@ -85,12 +85,16 @@ Prompt classifiers ("is this question easy or hard?") fail on distribution shift
 
 ### 3.3 Known Failure Mode: Confident Hallucination
 
-The drafter can produce confidently wrong answers (low entropy, bad output). This is the fundamental limitation of entropy-based routing. Mitigations:
+The drafter can produce confidently wrong answers (low entropy, bad output). This is the fundamental limitation of entropy-based routing, and it is measured rather than hypothetical: all 11 unacceptable drafts in the project benchmark have mean entropy between 0.10 and 0.48 bits, and the router at T=2.0 catches 1 of them. Mitigations:
 
 1. Periodic accuracy audits on draft-accepted responses
 2. Downstream feedback loop for flagging bad responses
 3. Conservative initial threshold (err toward escalation)
 4. Accept as a tradeoff -optimizing cost, not eliminating errors
+
+### 3.4 What the Evaluation Showed About the Statistic
+
+`docs/RESULTS.md` evaluates the windowed peak statistic (the exact value this router thresholds) as a detector of wrong drafts on three datasets. It has AUROC 0.68 on the project set but 0.51 on GSM8K and 0.47 on MMLU, where answer keys replace the LLM judge. At the production threshold the router is statistically indistinguishable from escalating the same fraction of requests at random. Trace-level statistics that need the complete draft (mean entropy: AUROC 0.76 on GSM8K, 0.63 on MMLU; minimum logprob: 0.62 and 0.68) carry real signal. The design tension is that the windowed statistic is what makes early exit and speculative execution possible; a running mean with a minimum token count is the candidate replacement.
 
 ---
 
@@ -146,7 +150,7 @@ Drafter starts generating
 
 ### 4.4 Cost Tradeoff
 
-Speculative execution trades a small amount of wasted compute (~5–10% of escalated request costs) for significantly better tail latency. Net TCO impact is minimal: only ~30% of requests trigger escalation, and of those, the speculative call is canceled ~40% of the time (drafter recovers).
+Speculative execution trades wasted compute on cancelled heavyweight calls for better tail latency on true escalations. The trigger and cancellation rates have not been measured against real traffic; the `draftthinker_speculative_triggers_total` and `draftthinker_speculative_cancellations_total` counters exist for that purpose. At T=2.0 the replayed benchmark escalates 7.7% of requests, so the upper bound on speculative waste is small in absolute terms.
 
 ---
 
@@ -189,6 +193,20 @@ The cache lookup runs on the request's hot path but the vector store query is se
 
 ---
 
+## 5A. Failure Handling
+
+Provider calls fail in two places, and the gateway degrades differently in each (`internal/gateway/handler.go`, configured under `fallback:`):
+
+|Failure|Default behaviour|Response headers|
+|-------|-----------------|----------------|
+|Drafter errors or times out before a decision|Send the request straight to the heavyweight|`X-Routing-Decision: fallback_heavyweight`, `X-Fallback-Reason: drafter_error`|
+|Heavyweight errors after an escalation decision|Re-run the drafter to completion and serve its answer, uncached|`X-Routing-Decision: fallback_draft`, `X-Fallback-Reason: heavyweight_error`|
+|Both fail|Surface the heavyweight error with its upstream status|none|
+
+Streaming escalations wait for the first heavyweight chunk before committing to an SSE response so that an immediate failure can still fall back; once bytes are on the wire the stream is terminated with `[DONE]`. Fallback responses are never inserted into the semantic cache. The drafter is re-run rather than served from the partial draft because escalation aborts the drafter stream, so the collected draft is usually incomplete. Each fallback increments `draftthinker_errors_total{type="drafter_fallback"|"heavyweight_fallback"}` and the routing-decision counter, so a provider incident shows up on the dashboard as a shift in decision mix rather than as a wall of 5xx. `benchmarks/cmd/loadtest -scenario flaky` injects drafter 503s and stalls against the mock upstream to exercise this path.
+
+---
+
 ## 6. Technology Stack
 
 |Layer|Technology|Rationale|
@@ -211,15 +229,20 @@ The original concept used Go for the gateway and Python/LangGraph for orchestrat
 
 ## 7. Key Metrics
 
-|Metric|Target|Measurement|
-|------|------|-----------|
-|TCO Reduction|91.6% vs all-heavyweight baseline|Calibrated on 518 prompts at T=2.0|
-|Draft Acceptance Rate|94% of requests|Requests served by drafter / total requests|
-|Accuracy (Draft Path)|98.2% acceptable|LLM-as-judge evaluation on benchmark set|
-|P99 Latency (Draft)|< 200ms|Prometheus histogram|
-|P99 Latency (Escalated)|< 2x heavyweight standalone|Compared to direct heavyweight call|
-|Cache Hit Rate|> 15% at steady state|Cache hits / total requests over 1hr window|
-|Proxy Overhead|< 5ms P99|Gateway processing time excluding model inference|
+Measured values come from the commands in `docs/RESULTS.md` section 9 and `README.md`; targets that have not been measured are marked as such.
+
+|Metric|Measured|Source|
+|------|--------|------|
+|Cost reduction vs all-heavyweight|82.9% (95% CI 79.6% to 86.0%) at T=2.0|`benchmarks/results/compare.json`, 519 prompts, input and output tokens priced|
+|Draft acceptance rate|92.3% (479 of 519)|same|
+|Served accuracy|98.1% (95% CI 96.7% to 99.0%), LLM-as-judge|same|
+|Rate-matched random baseline|98.1% accuracy at 83.9% cost reduction|same; the router does not beat it|
+|GSM8K / MMLU served accuracy at T=2.0|93.0% / 77.3% (always-drafter 92.7% / 75.7%)|`compare_gsm8k.json`, `compare_mmlu.json`|
+|Cost per 1,000 requests at T=2.0|USD 0.534 (project set), 0.293 (GSM8K), 0.549 (MMLU) vs 3.127 / 1.866 / 2.215 all-heavyweight|same|
+|Upstream latency, serial path, estimated from recorded calls|p50 3.7 s, p99 19.7 s on the project set (drafter and heavyweight round trips are similar at ~290 output tokens)|same|
+|Gateway latency under load (mock upstream)|see README load-test table|`benchmarks/cmd/loadtest`|
+|Cache hit rate|not measured against real traffic|Prometheus counters exist|
+|Speculative trigger and cancellation rates|not measured against real traffic|Prometheus counters exist|
 
 ---
 
