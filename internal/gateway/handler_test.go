@@ -94,6 +94,14 @@ func uncertainChunk(token string) protocol.StreamChunk {
 	}
 }
 
+// noFallback disables graceful degradation so the legacy error-path tests
+// keep asserting raw upstream status codes. Fallback behaviour is covered
+// in handler_fallback_test.go.
+func noFallback() config.FallbackConfig {
+	off := false
+	return config.FallbackConfig{OnDrafterError: &off, ServeDraftOnHeavyError: &off}
+}
+
 func defaultEntropyCfg() config.EntropyConfig {
 	return config.EntropyConfig{
 		Threshold:      1.0,
@@ -112,7 +120,7 @@ func newTestHandler(drafter, heavyweight *mockLLMClient) *chatHandler {
 	}, &metrics.NoopRecorder{})
 	disabled := false
 	specCfg := config.SpeculativeConfig{Enabled: &disabled}
-	return newChatHandler(drafter, heavyweight, rtr, nil, &metrics.NoopRecorder{}, cfg, specCfg, nil)
+	return newChatHandler(drafter, heavyweight, rtr, nil, &metrics.NoopRecorder{}, cfg, specCfg, noFallback(), nil)
 }
 
 func newTestHandlerWithSpec(drafter, heavyweight *mockLLMClient) *chatHandler {
@@ -132,7 +140,7 @@ func newTestHandlerWithSpec(drafter, heavyweight *mockLLMClient) *chatHandler {
 		},
 		SoftThresholdMult: specCfg.SoftThresholdMult,
 	}, heavyweight, &metrics.NoopRecorder{})
-	return newChatHandler(drafter, heavyweight, rtr, exec, &metrics.NoopRecorder{}, cfg, specCfg, nil)
+	return newChatHandler(drafter, heavyweight, rtr, exec, &metrics.NoopRecorder{}, cfg, specCfg, noFallback(), nil)
 }
 
 func newTestHandlerWithCache(drafter, heavyweight *mockLLMClient, cs cache.Store) *chatHandler {
@@ -144,7 +152,7 @@ func newTestHandlerWithCache(drafter, heavyweight *mockLLMClient, cs cache.Store
 	}, &metrics.NoopRecorder{})
 	disabled := false
 	specCfg := config.SpeculativeConfig{Enabled: &disabled}
-	return newChatHandler(drafter, heavyweight, rtr, nil, &metrics.NoopRecorder{}, cfg, specCfg, cs)
+	return newChatHandler(drafter, heavyweight, rtr, nil, &metrics.NoopRecorder{}, cfg, specCfg, noFallback(), cs)
 }
 
 func TestHandler_AcceptDraft(t *testing.T) {

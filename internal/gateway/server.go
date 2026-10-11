@@ -36,7 +36,7 @@ func NewServer(cfg *config.Config, drafter, heavyweight client.LLMClient, rtr *r
 		}, heavyweight, rec)
 	}
 
-	chatH := newChatHandler(drafter, heavyweight, rtr, exec, rec, cfg.Entropy, cfg.Speculative, cacheStore)
+	chatH := newChatHandler(drafter, heavyweight, rtr, exec, rec, cfg.Entropy, cfg.Speculative, cfg.Fallback, cacheStore)
 	mux.Handle("/v1/chat/completions", chatH)
 
 	if cacheStore != nil {
