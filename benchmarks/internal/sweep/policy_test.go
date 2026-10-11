@@ -6,76 +6,110 @@ import (
 	"github.com/trnahnh/draft-thinker/benchmarks/internal/collect"
 )
 
-func TestConfidencePolicyEscalatesOnLowLogprob(t *testing.T) {
-	tokens := []collect.TokenRecord{
-		{Token: "a", Logprob: -0.1},
-		{Token: "b", Logprob: -0.2},
-		{Token: "c", Logprob: -6.5},
-		{Token: "d", Logprob: -0.05},
+func recordWithLogprobs(lps ...float64) *collect.Record {
+	tokens := make([]collect.TokenRecord, len(lps))
+	for i, lp := range lps {
+		tokens[i] = collect.TokenRecord{Token: "t", Logprob: lp, Index: i}
 	}
+	return &collect.Record{PromptID: "p", Tokens: tokens, TokenCount: len(tokens)}
+}
 
-	policy := ConfidencePolicy(-3.0)
-	if !policy(tokens) {
+func TestConfidencePolicyEscalatesOnLowLogprob(t *testing.T) {
+	r := recordWithLogprobs(-0.1, -0.2, -6.5, -0.05)
+	d := ConfidencePolicy(-3.0)(r)
+	if !d.Escalate {
 		t.Error("expected escalation: min logprob -6.5 is below threshold -3.0")
+	}
+	if d.TokensConsumed != 4 {
+		t.Errorf("confidence policy reads the whole response, got %d tokens consumed", d.TokensConsumed)
 	}
 }
 
 func TestConfidencePolicyNoEscalation(t *testing.T) {
-	tokens := []collect.TokenRecord{
-		{Token: "a", Logprob: -0.1},
-		{Token: "b", Logprob: -0.2},
-		{Token: "c", Logprob: -1.5},
-	}
-
-	policy := ConfidencePolicy(-3.0)
-	if policy(tokens) {
+	r := recordWithLogprobs(-0.1, -0.2, -1.5)
+	if ConfidencePolicy(-3.0)(r).Escalate {
 		t.Error("expected no escalation: all logprobs above threshold -3.0")
 	}
 }
 
 func TestConfidencePolicyEmptyTokens(t *testing.T) {
-	policy := ConfidencePolicy(-3.0)
-	if policy(nil) {
+	if ConfidencePolicy(-3.0)(&collect.Record{}).Escalate {
 		t.Error("expected no escalation for empty tokens")
 	}
 }
 
-func TestConfidencePolicyBoundary(t *testing.T) {
-	tokens := []collect.TokenRecord{{Logprob: -3.0}}
-
-	policy := ConfidencePolicy(-3.0)
-	if policy(tokens) {
-		t.Error("logprob equal to threshold should NOT escalate (strict <)")
-	}
-
-	tokensBelow := []collect.TokenRecord{{Logprob: -3.01}}
-	if !policy(tokensBelow) {
-		t.Error("logprob below threshold should escalate")
+func TestConfidencePolicySentinelAlwaysEscalates(t *testing.T) {
+	r := recordWithLogprobs(-0.1, -9999.0, -0.2)
+	if !ConfidencePolicy(-40.0)(r).Escalate {
+		t.Error("a -9999 sentinel should escalate even at a very lenient threshold")
 	}
 }
 
-func TestAlwaysHeavyweightPolicy(t *testing.T) {
-	policy := AlwaysHeavyweightPolicy()
-	if !policy(nil) {
-		t.Error("expected always-heavyweight to escalate on empty tokens")
+func TestAlwaysPolicies(t *testing.T) {
+	r := recordWithLogprobs(-0.1)
+	if !AlwaysHeavyweightPolicy()(r).Escalate {
+		t.Error("always-heavyweight must escalate")
 	}
-	if !policy([]collect.TokenRecord{{Logprob: -0.01}}) {
-		t.Error("expected always-heavyweight to escalate regardless of tokens")
+	if AlwaysDrafterPolicy()(r).Escalate {
+		t.Error("always-drafter must never escalate")
 	}
 }
 
-func TestComputeStatsWithPolicyOverallAccuracy(t *testing.T) {
-	records := makeTestRecords()
-
-	stats := ComputeStatsWithPolicy(records, MethodAlwaysHeavyweight, 0, AlwaysHeavyweightPolicy(), DefaultPricing())
-
-	if stats.EscalationRate != 1.0 {
-		t.Errorf("expected escalation rate 1.0, got %f", stats.EscalationRate)
+func TestOraclePolicyFollowsLabel(t *testing.T) {
+	good := &collect.Record{PromptID: "g", Judge: collect.JudgeResult{Acceptable: true}}
+	bad := &collect.Record{PromptID: "b", Judge: collect.JudgeResult{Acceptable: false}}
+	if OraclePolicy()(good).Escalate {
+		t.Error("oracle must accept acceptable drafts")
 	}
-	if stats.OverallAccuracy != 1.0 {
-		t.Errorf("expected overall accuracy 1.0 (always escalates, never serves a bad draft), got %f", stats.OverallAccuracy)
+	if !OraclePolicy()(bad).Escalate {
+		t.Error("oracle must escalate unacceptable drafts")
 	}
-	if stats.CostReduction != 0 {
-		t.Errorf("expected zero cost reduction for always-heavyweight, got %f", stats.CostReduction)
+}
+
+func TestRandomPolicyIsDeterministicAndRateMatched(t *testing.T) {
+	records := make([]*collect.Record, 2000)
+	for i := range records {
+		records[i] = &collect.Record{PromptID: "prompt_" + string(rune('a'+i%26)) + string(rune('a'+(i/26)%26)) + string(rune('a'+(i/676)%26))}
+	}
+	policy := RandomPolicy(0.25, 42)
+	escalated := 0
+	for _, r := range records {
+		if policy(r).Escalate {
+			escalated++
+		}
+	}
+	rate := float64(escalated) / float64(len(records))
+	if rate < 0.20 || rate > 0.30 {
+		t.Errorf("expected escalation rate near 0.25, got %.3f", rate)
+	}
+	again := RandomPolicy(0.25, 42)
+	for _, r := range records {
+		if policy(r).Escalate != again(r).Escalate {
+			t.Fatal("random policy must be deterministic for a fixed seed and prompt ID")
+		}
+	}
+}
+
+func TestEntropyPolicyReportsEscalationPoint(t *testing.T) {
+	tokens := make([]collect.TokenRecord, 30)
+	for i := range tokens {
+		e := 0.2
+		if i == 20 {
+			e = 2.3
+		}
+		tokens[i] = collect.TokenRecord{Token: "t", Entropy: e, Index: i}
+	}
+	r := &collect.Record{Tokens: tokens, TokenCount: 30}
+	cfg := ReplayConfig{WindowSize: 10, EarlyExitCount: 10}
+
+	d := EntropyPolicy(0.4, cfg)(r)
+	if !d.Escalate {
+		t.Fatal("expected escalation when the window average exceeds the threshold")
+	}
+	if d.TokensConsumed != 21 {
+		t.Errorf("expected escalation right after token 20, got %d tokens consumed", d.TokensConsumed)
+	}
+	if EntropyPolicy(2.4, cfg)(r).Escalate {
+		t.Error("threshold above the maximum possible entropy must never escalate")
 	}
 }
