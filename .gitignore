@@ -39,4 +39,4 @@ benchmarks/results/*.bak
 web/node_modules/
 web/.next/
 web/.env.local
-config.loadtest.yaml
+

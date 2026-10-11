@@ -15,13 +15,21 @@ type mockServer struct {
 	tokenCount int
 	chunkDelay time.Duration
 	mode       string
+	// drafterFailRate is the probability that a drafter request (model name
+	// containing "nano") returns HTTP 503; drafterHangRate is the probability
+	// that it stalls for drafterHang, long enough to trip the gateway's
+	// drafter timeout. Heavyweight requests are never faulted so the
+	// fallback path has somewhere to go.
+	drafterFailRate float64
+	drafterHangRate float64
+	drafterHang     time.Duration
 }
 
 type embeddingResponse struct {
-	Object string              `json:"object"`
-	Data   []embeddingData     `json:"data"`
-	Model  string              `json:"model"`
-	Usage  embeddingUsage      `json:"usage"`
+	Object string          `json:"object"`
+	Data   []embeddingData `json:"data"`
+	Model  string          `json:"model"`
+	Usage  embeddingUsage  `json:"usage"`
 }
 
 type embeddingData struct {
@@ -36,7 +44,8 @@ type embeddingUsage struct {
 }
 
 type chatRequest struct {
-	Stream bool `json:"stream"`
+	Model  string `json:"model"`
+	Stream bool   `json:"stream"`
 }
 
 func (m *mockServer) pickMode() string {
@@ -73,6 +82,22 @@ func (m *mockServer) handleChat(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
+	}
+
+	if strings.Contains(req.Model, "nano") {
+		roll := rand.Float64()
+		switch {
+		case roll < m.drafterFailRate:
+			http.Error(w, `{"error":{"message":"injected drafter failure","type":"server_error"}}`, http.StatusServiceUnavailable)
+			return
+		case roll < m.drafterFailRate+m.drafterHangRate:
+			select {
+			case <-time.After(m.drafterHang):
+			case <-r.Context().Done():
+			}
+			http.Error(w, "injected drafter stall", http.StatusGatewayTimeout)
+			return
+		}
 	}
 
 	mode := m.pickMode()
@@ -174,11 +199,20 @@ func (m *mockServer) handleEmbeddings(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(resp)
 }
 
-func startMockServer(addr string, mode string, tokenCount int, chunkDelay time.Duration) *http.Server {
+type faultConfig struct {
+	drafterFailRate float64
+	drafterHangRate float64
+	drafterHang     time.Duration
+}
+
+func startMockServer(addr string, mode string, tokenCount int, chunkDelay time.Duration, faults faultConfig) *http.Server {
 	m := &mockServer{
-		tokenCount: tokenCount,
-		chunkDelay: chunkDelay,
-		mode:       mode,
+		tokenCount:      tokenCount,
+		chunkDelay:      chunkDelay,
+		mode:            mode,
+		drafterFailRate: faults.drafterFailRate,
+		drafterHangRate: faults.drafterHangRate,
+		drafterHang:     faults.drafterHang,
 	}
 
 	mux := http.NewServeMux()

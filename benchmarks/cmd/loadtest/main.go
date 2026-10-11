@@ -16,13 +16,26 @@ func main() {
 	rate := flag.Int("rate", 50, "requests per second")
 	duration := flag.Duration("duration", 30*time.Second, "test duration")
 	mockPort := flag.Int("mock-port", 9999, "port for mock OpenAI server")
-	scenario := flag.String("scenario", "confident", "test scenario: confident, mixed, cache")
+	scenario := flag.String("scenario", "confident", "test scenario: confident, mixed, cache, flaky")
 	tokenCount := flag.Int("tokens", 20, "tokens per mock response")
 	chunkDelay := flag.Duration("chunk-delay", 5*time.Millisecond, "delay between SSE chunks")
+	drafterFailRate := flag.Float64("drafter-fail-rate", 0, "fraction of mock drafter calls that return HTTP 503 (flaky scenario)")
+	drafterHangRate := flag.Float64("drafter-hang-rate", 0, "fraction of mock drafter calls that stall past the gateway drafter timeout")
+	drafterHang := flag.Duration("drafter-hang", 5*time.Second, "how long a stalled mock drafter call hangs")
 	flag.Parse()
 
+	faults := faultConfig{drafterFailRate: *drafterFailRate, drafterHangRate: *drafterHangRate, drafterHang: *drafterHang}
+	if *scenario == "flaky" && faults.drafterFailRate == 0 && faults.drafterHangRate == 0 {
+		faults.drafterFailRate = 0.2
+		faults.drafterHangRate = 0.05
+	}
+
 	mockAddr := fmt.Sprintf(":%d", *mockPort)
-	srv := startMockServer(mockAddr, *scenario, *tokenCount, *chunkDelay)
+	mockMode := *scenario
+	if mockMode == "flaky" {
+		mockMode = "mixed"
+	}
+	srv := startMockServer(mockAddr, mockMode, *tokenCount, *chunkDelay, faults)
 	defer srv.Close()
 
 	ready := false
@@ -60,8 +73,10 @@ func main() {
 	rateObj := vegeta.Rate{Freq: *rate, Per: time.Second}
 
 	var metrics vegeta.Metrics
+	decisions := map[string]int{}
 	for res := range attacker.Attack(targeter, rateObj, *duration, *scenario) {
 		metrics.Add(res)
+		decisions[res.Headers.Get("X-Routing-Decision")]++
 	}
 	metrics.Close()
 
@@ -82,6 +97,21 @@ func main() {
 	fmt.Println("Status Codes:")
 	for code, count := range metrics.StatusCodes {
 		fmt.Printf("  %s: %d\n", code, count)
+	}
+	fmt.Println()
+	fmt.Println("Routing Decisions (X-Routing-Decision):")
+	for _, d := range []string{"accept", "escalate", "cache_hit", "fallback_heavyweight", "fallback_draft", ""} {
+		if n, ok := decisions[d]; ok {
+			label := d
+			if label == "" {
+				label = "(none: error response)"
+			}
+			fmt.Printf("  %s: %d\n", label, n)
+		}
+	}
+	if faults.drafterFailRate > 0 || faults.drafterHangRate > 0 {
+		fmt.Printf("\nInjected faults: drafter 503 rate %.0f%%, drafter stall rate %.0f%% (stall %s)\n",
+			faults.drafterFailRate*100, faults.drafterHangRate*100, *drafterHang)
 	}
 	if len(metrics.Errors) > 0 {
 		fmt.Println()

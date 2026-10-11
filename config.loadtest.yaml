@@ -1,0 +1,43 @@
+server:
+  port: 8080
+  read_timeout: 30
+  write_timeout: 120
+  idle_timeout: 60
+
+drafter:
+  provider: openai
+  base_url: http://localhost:9999/v1
+  model: gpt-4.1-nano
+  timeout: 2
+
+heavyweight:
+  provider: openai
+  base_url: http://localhost:9999/v1
+  model: gpt-4.1
+  timeout: 60
+
+entropy:
+  threshold: 2.0
+  window_size: 10
+  early_exit_count: 10
+  top_logprobs: 5
+
+speculative:
+  enabled: true
+  soft_threshold_mult: 0.8
+
+cache:
+  enabled: false
+  similarity_threshold: 0.95
+  ttl_seconds: 3600
+  embedding_model: text-embedding-3-small
+  embedding_dimensions: 1536
+  qdrant_collection: draftthinker_cache
+
+fallback:
+  on_drafter_error: true
+  serve_draft_on_heavy_error: true
+
+metrics:
+  enabled: true
+  path: /metrics
