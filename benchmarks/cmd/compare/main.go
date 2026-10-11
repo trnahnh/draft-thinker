@@ -31,6 +31,7 @@ type ciSummary struct {
 	FP                 int     `json:"fp"`
 	TN                 int     `json:"tn"`
 	FN                 int     `json:"fn"`
+	Note               string  `json:"note,omitempty"`
 }
 
 type aurocSummary struct {
@@ -83,6 +84,7 @@ func main() {
 	headlineEntropyThreshold := flag.Float64("headline-entropy-threshold", 2.0, "entropy threshold to bootstrap (the calibrated production threshold)")
 	randomSeed := flag.Int64("random-seed", 42, "seed for the rate-matched random baseline")
 	outputOnlyPricing := flag.Bool("output-only-pricing", false, "ignore input tokens (reproduces the original calibration's cost model)")
+	modelsStr := flag.String("models", "", "comma-separated learned router model JSON files (from benchmarks/train_router.py)")
 	flag.Parse()
 
 	entropyThresholds, err := parseFloats(*entropyThresholdsStr)
@@ -162,6 +164,50 @@ func main() {
 	allStats = append(allStats, meanStats, randomStats, drafterStats, heavyStats, oracleStats)
 	sum.BaselineCostPer1K = heavyStats.BaselineCostPer1K
 
+	type bootstrapRun struct {
+		stats  sweep.ThresholdStats
+		policy sweep.EscalationPolicy
+		note   string
+	}
+	var learnedRuns []bootstrapRun
+	var learnedScores []struct {
+		name  string
+		score sweep.ScoreFunc
+	}
+	for _, path := range strings.Split(*modelsStr, ",") {
+		path = strings.TrimSpace(path)
+		if path == "" {
+			continue
+		}
+		model, err := sweep.LoadLearnedModel(path)
+		if err != nil {
+			log.Fatalf("loading model %s: %v", path, err)
+		}
+		method := sweep.Method("learned_" + model.Name)
+		score := model.Score
+		learnedScores = append(learnedScores, struct {
+			name  string
+			score sweep.ScoreFunc
+		}{string(method), score})
+		for _, rate := range []float64{0.02, 0.05, 0.10, 0.15, 0.20, 0.30, 0.40, 0.50} {
+			tau := sweep.ThresholdForRate(valid, score, rate)
+			allStats = append(allStats, sweep.ComputeStatsWithPolicy(valid, method, tau, model.Policy(tau), pricing))
+		}
+		matchedTau := sweep.ThresholdForRate(valid, score, headline.EscalationRate)
+		matched := sweep.ComputeStatsWithPolicy(valid, method, matchedTau, model.Policy(matchedTau), pricing)
+		allStats = append(allStats, matched)
+		learnedRuns = append(learnedRuns, bootstrapRun{matched, model.Policy(matchedTau), "threshold matched to entropy_router escalation rate"})
+		for _, op := range model.Thresholds {
+			if op.Tau < 0 {
+				continue
+			}
+			st := sweep.ComputeStatsWithPolicy(valid, method, op.Tau, model.Policy(op.Tau), pricing)
+			allStats = append(allStats, st)
+			learnedRuns = append(learnedRuns, bootstrapRun{st, model.Policy(op.Tau), "calibrated operating point " + op.Name})
+		}
+		log.Printf("learned model %s (%s, prefix_tokens=%d): %d trees/coefs, %d operating points", model.Name, model.Kind, model.PrefixTokens, max(len(model.Trees), len(model.Coef)), len(model.Thresholds))
+	}
+
 	if err := writeCSV(*output, func(f *os.File) error { return sweep.WriteComparisonCSV(f, allStats) }); err != nil {
 		log.Fatalf("writing CSV: %v", err)
 	}
@@ -194,6 +240,12 @@ func main() {
 		{"frac_tokens_above_1bit", sweep.HighEntropyFraction(1.0)},
 		{"neg_min_logprob", sweep.MinLogprobScore},
 	}
+	for _, ls := range learnedScores {
+		scores = append(scores, struct {
+			name  string
+			score sweep.ScoreFunc
+		}{ls.name, ls.score})
+	}
 	for _, s := range scores {
 		res := sweep.BootstrapAUROC(valid, s.name, s.score, *bootstrapIterations, *bootstrapSeed)
 		if !res.OK {
@@ -209,11 +261,7 @@ func main() {
 
 		fmt.Println()
 		fmt.Printf("Bootstrap 95%% CI (%d resamples, seed=%d):\n", *bootstrapIterations, *bootstrapSeed)
-		runs := []struct {
-			stats  sweep.ThresholdStats
-			policy sweep.EscalationPolicy
-			note   string
-		}{
+		runs := []bootstrapRun{
 			{headline, sweep.EntropyPolicy(headline.Threshold, replayCfg), "calibrated production threshold"},
 			{closest, sweep.ConfidencePolicy(closest.Threshold), "closest cost reduction to entropy_router"},
 			{meanStats, meanPolicy, "trace-mean entropy, threshold matched to entropy_router escalation rate"},
@@ -222,10 +270,11 @@ func main() {
 			{heavyStats, sweep.AlwaysHeavyweightPolicy(), "cost ceiling"},
 			{oracleStats, sweep.OraclePolicy(), "perfect label knowledge, unattainable"},
 		}
+		runs = append(runs, learnedRuns...)
 		for _, run := range runs {
 			ci := sweep.Bootstrap(valid, run.stats.Method, run.stats.Threshold, run.policy, pricing, *bootstrapIterations, *bootstrapSeed)
-			fmt.Printf("  %-22s T=%-7.2f cost_reduction=%5.1f%% [%5.1f%%, %5.1f%%]  accuracy=%5.1f%% [%5.1f%%, %5.1f%%]  %s\n",
-				run.stats.Method, run.stats.Threshold,
+			fmt.Printf("  %-26s T=%-7.3f esc=%5.1f%% cost_reduction=%5.1f%% [%5.1f%%, %5.1f%%]  accuracy=%5.1f%% [%5.1f%%, %5.1f%%]  %s\n",
+				run.stats.Method, run.stats.Threshold, run.stats.EscalationRate*100,
 				ci.CostReductionPoint*100, ci.CostReductionLower*100, ci.CostReductionUpper*100,
 				ci.AccuracyPoint*100, ci.AccuracyLower*100, ci.AccuracyUpper*100, run.note)
 			sum.Headline = append(sum.Headline, ciSummary{
@@ -235,6 +284,7 @@ func main() {
 				CostReduction: ci.CostReductionPoint, CostReductionLower: ci.CostReductionLower, CostReductionUpper: ci.CostReductionUpper,
 				CostPer1K: run.stats.CostPer1K, LatencyP50MS: run.stats.LatencyP50MS, LatencyP99MS: run.stats.LatencyP99MS,
 				TP: run.stats.TP, FP: run.stats.FP, TN: run.stats.TN, FN: run.stats.FN,
+				Note: run.note,
 			})
 		}
 	}
