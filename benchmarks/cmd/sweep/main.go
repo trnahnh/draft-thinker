@@ -1,8 +1,6 @@
 package main
 
 import (
-	"bufio"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
@@ -27,7 +25,7 @@ func main() {
 		log.Fatalf("parsing thresholds: %v", err)
 	}
 
-	records, err := loadRecords(*input)
+	records, err := collect.LoadRecords(*input)
 	if err != nil {
 		log.Fatalf("loading records: %v", err)
 	}
@@ -90,38 +88,6 @@ func parseThresholds(s string) ([]float64, error) {
 	return thresholds, nil
 }
 
-func loadRecords(path string) ([]*collect.Record, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, fmt.Errorf("opening records: %w", err)
-	}
-	defer f.Close()
-
-	var records []*collect.Record
-	scanner := bufio.NewScanner(f)
-	scanner.Buffer(make([]byte, 1024*1024), 1024*1024)
-
-	lineNum := 0
-	for scanner.Scan() {
-		lineNum++
-		line := scanner.Bytes()
-		if len(line) == 0 {
-			continue
-		}
-		var r collect.Record
-		if err := json.Unmarshal(line, &r); err != nil {
-			log.Printf("warning: skipping malformed line %d: %v", lineNum, err)
-			continue
-		}
-		records = append(records, &r)
-	}
-
-	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("reading records: %w", err)
-	}
-
-	return records, nil
-}
 
 func countErrors(records []*collect.Record) int {
 	n := 0
