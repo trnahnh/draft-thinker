@@ -217,12 +217,12 @@ export default function Home() {
                 {
                   title: "SPECULATIVE WASTE",
                   color: "var(--color-amber)",
-                  text: "Heavyweight fires at 0.8*T but drafter recovers. Wasted call. Under 10% of escalation cost. Latency savings on true escalations justify overhead.",
+                  text: "Measured by replaying traces through the executor: fires on 70 to 89% of requests, cancels 93 to 99% of those calls, median head start 26 to 37 ms. The under-10%-waste target is not met. See docs/RESULTS.md section 11.",
                 },
                 {
                   title: "CACHE CONSERVATISM",
                   color: "var(--color-cyan)",
-                  text: "Cosine > 0.95 strict by design. Only draft-accepted responses cached. Escalated responses excluded. Re-draft beats stale answer.",
+                  text: "Cosine > 0.95, only draft-accepted responses cached. Replayed: 0 to 1% hits on unique benchmark prompts, 100% on repeats, lookup about 200 ms. At 0.90 MMLU would serve 19 wrong cached answers in 30 hits.",
                 },
                 {
                   title: "ENTROPY vs CLASSIFICATION",

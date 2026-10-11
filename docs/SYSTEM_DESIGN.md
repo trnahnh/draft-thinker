@@ -109,17 +109,23 @@ Naive draft-then-verify is serial. Hard questions incur double latency: drafter 
 ```text
 Drafter starts generating
   │
-  ├── First 10 tokens: windowed entropy > 0.8 * T (soft threshold)
+  ├── Any single token with entropy > 0.8 * T (soft threshold)
   │     │
   │     └── Fire parallel request to heavyweight model
   │
-  ├── Drafter entropy drops back below T → Cancel heavyweight (recovered)
+  ├── Drafter finishes without the window crossing T → Cancel heavyweight
   │
-  └── Drafter entropy stays high → Heavyweight already has head start
+  └── Window crosses T → Heavyweight already has head start
         │
         └── Additional latency = heavyweight_total - drafter_abort_time
             (NOT full heavyweight latency)
 ```
+
+As implemented (`internal/speculative/executor.go`) the soft trigger is a
+per-token test, not a windowed one, and the hard-threshold check runs
+before the soft check on each token, so a token that jumps straight past T
+escalates without any speculative call. Both facts matter for the measured
+behaviour in 4.4.
 
 ### 4.3 Request Lifecycle State Machine
 
@@ -150,7 +156,7 @@ Drafter starts generating
 
 ### 4.4 Cost Tradeoff
 
-Speculative execution trades wasted compute on cancelled heavyweight calls for better tail latency on true escalations. The trigger and cancellation rates have not been measured against real traffic; the `draftthinker_speculative_triggers_total` and `draftthinker_speculative_cancellations_total` counters exist for that purpose. At T=2.0 the replayed benchmark escalates 7.7% of requests, so the upper bound on speculative waste is small in absolute terms.
+Speculative execution trades wasted compute on cancelled heavyweight calls for better tail latency on true escalations. Measured by replaying the recorded traces through this executor (`benchmarks/cmd/replayspec`, `docs/RESULTS.md` section 11), at the production multiplier 0.8 it fires on 70.5% of project-set requests and cancels 96.4% of those calls; only 13 of the 40 escalations get a head start, with a median head start of 36 ms. The same holds on every other trace (86 to 89% trigger, 93 to 99% cancel). If cancelled calls were billed to completion they would cost 80 to 88% of the always-heavyweight bill, more than the router saves; what they actually bill depends on provider behaviour and was not measured. The Phase 4 target of under 10% waste is not met at any multiplier from 0.5 to 0.9. The practical conclusion is that speculative execution should be off (`speculative.enabled: false`) until a prefix signal exists; see `docs/STREAMING_DESIGN.md`.
 
 ---
 
@@ -171,7 +177,7 @@ Embed prompt (text-embedding-3-small, 1536-dim)
   ▼
 Qdrant nearest-neighbor lookup
   │
-  ├── cosine similarity > 0.95 → Return cached response (< 50ms)
+  ├── cosine similarity > 0.95 → Return cached response (about 200 ms, dominated by the embedding call)
   │
   └── similarity ≤ 0.95 → Proceed to drafter pipeline
 ```
@@ -189,7 +195,7 @@ Qdrant nearest-neighbor lookup
 
 ### 5.4 Cache Isolation
 
-The cache lookup runs on the request's hot path but the vector store query is separate from the main proxy logic. On cache miss, the system proceeds to drafting with zero added latency beyond the embedding + lookup time (~10–15ms).
+The cache lookup runs on the request's hot path but the vector store query is separate from the main proxy logic. On cache miss, the system proceeds to drafting after paying the embedding call plus lookup, measured at p50 197 to 201 ms and p99 360 to 406 ms by replaying the traces through `cache.VectorStore` (`benchmarks/cmd/replaycache`, `docs/RESULTS.md` section 12). Measured hit rate on unique benchmark traffic is 0% on the project set and GSM8K and 1.0% on MMLU, where one of the three hits served a wrong answer to a templated near-duplicate at cosine 0.959; at 0.90 the same replay would serve 19 wrong answers in 30 hits, which is the measured case for keeping 0.95.
 
 ---
 
@@ -229,7 +235,7 @@ The original concept used Go for the gateway and Python/LangGraph for orchestrat
 
 ## 7. Key Metrics
 
-Measured values come from the commands in `docs/RESULTS.md` section 9 and `README.md`; targets that have not been measured are marked as such.
+Measured values come from the commands in `docs/RESULTS.md` section 14 and `README.md`; targets that have not been measured are marked as such.
 
 |Metric|Measured|Source|
 |------|--------|------|
@@ -241,8 +247,10 @@ Measured values come from the commands in `docs/RESULTS.md` section 9 and `READM
 |Cost per 1,000 requests at T=2.0|USD 0.534 (project set), 0.293 (GSM8K), 0.549 (MMLU) vs 3.127 / 1.866 / 2.215 all-heavyweight|same|
 |Upstream latency, serial path, estimated from recorded calls|p50 3.7 s, p99 19.7 s on the project set (drafter and heavyweight round trips are similar at ~290 output tokens)|same|
 |Gateway latency under load (mock upstream)|see README load-test table|`benchmarks/cmd/loadtest`|
-|Cache hit rate|not measured against real traffic|Prometheus counters exist|
-|Speculative trigger and cancellation rates|not measured against real traffic|Prometheus counters exist|
+|Cache hit rate on replayed unique benchmark traffic|0.0% project set, 0.0% GSM8K, 1.0% MMLU (1 of 3 hits wrong); lookup p50 about 200 ms|`benchmarks/results/cache_replay_*.json`|
+|Speculative trigger and cancellation rates (replay through the executor)|70.5% trigger, 96.4% cancel on the project set; 86 to 89% and 93 to 99% on the other traces|`benchmarks/results/speculative_*.json`|
+|Replication on disjoint samples (GSM8K, MMLU, ARC-Challenge, n=500 each)|window-peak AUROC 0.57 / 0.45 / 0.52; router 0.2 to 1.0 points below rate-matched random|`benchmarks/results/compare_*_r2.json`|
+|Learned whole-trace router (trained round 1, tested round 2)|AUROC 0.81 / 0.72 / 0.75 (GSM8K, MMLU, ARC), equal to mean entropy alone within CIs|same|
 
 ---
 

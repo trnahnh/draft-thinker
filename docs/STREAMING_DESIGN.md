@@ -30,7 +30,7 @@ Consequences, measured on the committed traces (`compare*.json`,
   executor at the production soft multiplier (0.8), the median gap between
   the soft trigger and the hard escalation is 36 ms on the project set,
   while 70% of requests trigger a speculative call and 96% of those are
-  cancelled. See `docs/RESULTS.md` section 10.
+  cancelled. See `docs/RESULTS.md` section 11.
 
 ## 2. What streaming the draft would change
 
@@ -95,4 +95,4 @@ prefix signal measurements it should be framed as a latency feature of an
 always-drafter configuration, not as routing. The honest next step for the
 routing story is a whole-trace router on non-streaming traffic, where
 buffering is already the contract, and that is where the round 2
-measurements point (`docs/RESULTS.md` sections 9 and 11).
+measurements point (`docs/RESULTS.md` sections 9 and 10).

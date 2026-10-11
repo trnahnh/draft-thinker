@@ -124,7 +124,7 @@ Phase 4 added speculative execution. Three new Prometheus instruments track when
 ### Interpreting Speculative Metrics
 
 - **Trigger rate** = `speculative_triggers_total` / `requests_total`. Healthy range depends on workload; higher means more requests hit the soft threshold.
-- **Cancellation ratio** = `speculative_cancellations_total` / `speculative_triggers_total`. This is wasted compute. Target < 10% of total escalation cost.
+- **Cancellation ratio** = `speculative_cancellations_total` / `speculative_triggers_total`. This is wasted compute. The original target was under 10% of total escalation cost; replaying the recorded traces through the executor measures 93 to 99% at the production soft multiplier, with 70 to 89% of requests triggering (`docs/RESULTS.md` section 11).
 - **Latency saved** = the histogram shows how much head start the heavyweight got before escalation confirmed. Higher values mean more latency eliminated from the user-facing request.
 
 ## Phase 5 Metrics
@@ -166,6 +166,6 @@ Both decisions are also returned on the `X-Routing-Decision` response header wit
 
 ### Interpreting Cache Metrics
 
-- **Hit rate** = `cache_hits_total` / (`cache_hits_total` + `cache_misses_total`). Higher means more requests skip the draft pipeline entirely.
+- **Hit rate** = `cache_hits_total` / (`cache_hits_total` + `cache_misses_total`). Higher means more requests skip the draft pipeline entirely. Replayed benchmark traffic measures 0 to 1% on unique prompts and 100% on exact repeats; lookup latency is about 200 ms at p50 because of the embedding call (`docs/RESULTS.md` section 12).
 - **Lookup latency** = dominated by the embedding API call. Target < 50ms for the full lookup (embed + vector search + Redis get).
 - **Cache miss with lazy cleanup** = a vector match was found in Qdrant but the Redis TTL had expired. The orphaned Qdrant point is deleted. Logged as "cache: lazy cleanup of orphaned qdrant point".

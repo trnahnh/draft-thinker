@@ -163,18 +163,6 @@
  },
  "thresholds": [
   {
-   "name": "served_error_le_0.02",
-   "target": 0.02,
-   "tau": -1.0,
-   "description": "largest acceptance set with corrected served error <= 2% on calibration folds; unattainable, always escalate"
-  },
-  {
-   "name": "served_error_le_0.03",
-   "target": 0.03,
-   "tau": -1.0,
-   "description": "largest acceptance set with corrected served error <= 3% on calibration folds; unattainable, always escalate"
-  },
-  {
    "name": "served_error_le_0.05",
    "target": 0.05,
    "tau": -1.0,
@@ -185,6 +173,18 @@
    "target": 0.08,
    "tau": 0.08163265306122448,
    "description": "largest acceptance set with corrected served error <= 8% on calibration folds"
+  },
+  {
+   "name": "served_error_le_0.10",
+   "target": 0.1,
+   "tau": 0.3125,
+   "description": "largest acceptance set with corrected served error <= 10% on calibration folds"
+  },
+  {
+   "name": "served_error_le_0.12",
+   "target": 0.12,
+   "tau": 0.31313131313131315,
+   "description": "largest acceptance set with corrected served error <= 12% on calibration folds"
   }
  ],
  "train": {

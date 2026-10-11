@@ -86,6 +86,8 @@ The originally recorded figures (94%, 98.2%, 91.6%) could not be regenerated fro
 
 Escalated requests show measurably lower P99 latency compared to Phase 2's serial approach. Wasted compute from canceled speculative calls is **< 10%** of total escalation cost.
 
+**Status after measurement (round 2):** not met. Replaying the recorded traces through the executor shows 70 to 89% of requests trigger a speculative call and 93 to 99% of those are cancelled, with a median head start of 26 to 37 ms on the few escalations that get one. See `docs/RESULTS.md` section 11.
+
 ---
 
 ## Phase 5 -Semantic Cache (Week 7) [COMPLETE]
@@ -108,6 +110,8 @@ Escalated requests show measurably lower P99 latency compared to Phase 2's seria
 ### Phase 5 exit criteria
 
 Repeated or semantically similar queries return cached responses with **< 50ms latency**. Cache hit rate is measurable and tracked in Grafana.
+
+**Status after measurement (round 2):** the latency target is not met. A lookup costs about 200 ms (p50) because it includes a remote embedding call. Hit rate on unique benchmark traffic is 0 to 1%, and exact repeats hit 100%. See `docs/RESULTS.md` section 12.
 
 ---
 
@@ -151,6 +155,26 @@ Every number in `README.md`, `docs/RESULTS.md`, `docs/METRICS.md` and the showca
 
 ---
 
+## Phase 8 -Replication, Learned Router, Measuring the Unmeasured [COMPLETE]
+
+**Goal:** Check that the round 1 findings hold on independent samples, try a better router under a held-out protocol, and measure every claim that was still unmeasured.
+
+### Phase 8 deliverables
+
+- Second disjoint samples of GSM8K and MMLU (seed 7, 500 each) and an ARC-Challenge sample; `fetchpublic -exclude` and A to E grading
+- Learned router pipeline: Go feature export, Python training (logistic and gradient boosting), JSON export, Go evaluator with parity test, isotonic calibration and served-error operating points
+- `replayspec`: speculative execution replayed through the production executor from recorded traces
+- `replaycache`: semantic cache replayed through the production store with the real embedding client
+- Open model (qwen2.5-coder:7b) as drafter with gpt-4.1 heavyweight and exact-match grading on GSM8K
+- `docs/STREAMING_DESIGN.md`: design note and decision list for streaming accepted drafts
+- `ROUND2_REPORT.md`
+
+### Phase 8 exit criteria
+
+Every round 1 finding is marked replicated or not with the numbers; the learned router is reported against random, oracle, always-drafter and the production router on data it never saw; the Phase 4 and 5 exit criteria are updated with measured values.
+
+---
+
 ## Timeline Summary
 
 |Week|Phase|Key Deliverable|
@@ -162,5 +186,6 @@ Every number in `README.md`, `docs/RESULTS.md`, `docs/METRICS.md` and the showca
 |7|Semantic Cache|Vector-based response caching|
 |8|Hardening|Dashboard, load tests, documentation|
 |9|Evaluation hardening|Reproducible traces, public benchmarks, honest baselines, provider fallbacks|
+|10|Replication and learned router|Disjoint resamples, ARC-Challenge, held-out learned router, speculative and cache replays|
 
 **Note:** Parallelizable with Ferrox development if phases are staggered. Phase 1–2 can overlap with Ferrox Phase 5–6.

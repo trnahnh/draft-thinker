@@ -42,20 +42,6 @@
    "path": "benchmarks/models\\router_full_logistic.json",
    "operating_points": [
     {
-     "name": "served_error_le_0.02",
-     "target": 0.02,
-     "tau": -1.0,
-     "description": "largest acceptance set with corrected served error <= 2% on calibration folds; unattainable, always escalate",
-     "calibration_rate": null
-    },
-    {
-     "name": "served_error_le_0.03",
-     "target": 0.03,
-     "tau": -1.0,
-     "description": "largest acceptance set with corrected served error <= 3% on calibration folds; unattainable, always escalate",
-     "calibration_rate": null
-    },
-    {
      "name": "served_error_le_0.05",
      "target": 0.05,
      "tau": -1.0,
@@ -68,6 +54,20 @@
      "tau": 0.08163265306122448,
      "description": "largest acceptance set with corrected served error <= 8% on calibration folds",
      "calibration_rate": 0.07986688851913477
+    },
+    {
+     "name": "served_error_le_0.10",
+     "target": 0.1,
+     "tau": 0.3125,
+     "description": "largest acceptance set with corrected served error <= 10% on calibration folds",
+     "calibration_rate": 0.09983361064891846
+    },
+    {
+     "name": "served_error_le_0.12",
+     "target": 0.12,
+     "tau": 0.31313131313131315,
+     "description": "largest acceptance set with corrected served error <= 12% on calibration folds",
+     "calibration_rate": 0.11980033277870217
     }
    ],
    "calibration_breakpoints": 28
@@ -75,20 +75,6 @@
   "gbt": {
    "path": "benchmarks/models\\router_full_gbt.json",
    "operating_points": [
-    {
-     "name": "served_error_le_0.02",
-     "target": 0.02,
-     "tau": -1.0,
-     "description": "largest acceptance set with corrected served error <= 2% on calibration folds; unattainable, always escalate",
-     "calibration_rate": null
-    },
-    {
-     "name": "served_error_le_0.03",
-     "target": 0.03,
-     "tau": -1.0,
-     "description": "largest acceptance set with corrected served error <= 3% on calibration folds; unattainable, always escalate",
-     "calibration_rate": null
-    },
     {
      "name": "served_error_le_0.05",
      "target": 0.05,
@@ -102,6 +88,20 @@
      "tau": 0.09142857142857143,
      "description": "largest acceptance set with corrected served error <= 8% on calibration folds",
      "calibration_rate": 0.07986688851913477
+    },
+    {
+     "name": "served_error_le_0.10",
+     "target": 0.1,
+     "tau": 0.22784810126582278,
+     "description": "largest acceptance set with corrected served error <= 10% on calibration folds",
+     "calibration_rate": 0.09983361064891846
+    },
+    {
+     "name": "served_error_le_0.12",
+     "target": 0.12,
+     "tau": 0.2619047619047619,
+     "description": "largest acceptance set with corrected served error <= 12% on calibration folds",
+     "calibration_rate": 0.11980033277870217
     }
    ],
    "calibration_breakpoints": 22

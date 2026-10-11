@@ -1,5 +1,9 @@
 # Enhancement Report: evaluation hardening and failure handling
 
+Round 1 of two. Round 2 (replication on new samples, a learned router,
+measured speculative execution and cache, open-model accuracy) is in
+`ROUND2_REPORT.md` on branch `round2/draft-thinker`.
+
 Branch: `enhance/evaluation-hardening` (built on `main` at `001889b`). Every
 number in this report is produced by a command listed next to it, from data
 committed on the branch. API spend for this pass: under USD 2 (GSM8K and
