@@ -1,0 +1,26 @@
+{
+  "input": "benchmarks/results/collected.jsonl.gz",
+  "records": 519,
+  "similarity_threshold": 0.95,
+  "embedding_model": "text-embedding-3-small",
+  "inserted_accepted_drafts": 479,
+  "hits": 0,
+  "hit_rate": 0,
+  "hits_wrong_for_new_prompt": 0,
+  "hits_with_ground_truth": 0,
+  "nearest_similarity_quantiles": {
+    "p100": 0.8779156585011578,
+    "p50": 0.5348859504975383,
+    "p90": 0.692100867815705,
+    "p99": 0.7985302309199492
+  },
+  "prompts_with_neighbour_above": {
+    "0.80": 5,
+    "0.85": 2
+  },
+  "wrong_answer_hits_if_threshold_were": {},
+  "lookup_p50_ms": 196.862,
+  "lookup_p99_ms": 373.917,
+  "repeat_pass_hits": 479,
+  "repeat_pass_expected_hits": 479
+}
