@@ -140,7 +140,7 @@
         {
           "refId": "A",
           "expr": "vector(0.916)",
-          "legendFormat": "calibrated on 518 prompts at T=2.0"
+          "legendFormat": "calibrated on 519 prompts at T=2.0"
         }
       ]
     },
