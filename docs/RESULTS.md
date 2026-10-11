@@ -95,7 +95,7 @@ replacement, seed 42.
 | Method | Threshold | Escalation | Accuracy (95% CI) | Cost reduction (95% CI) | USD / 1k requests |
 |---|---|---|---|---|---|
 | entropy_router | 2.00 | 7.7% | 98.1% (96.7 to 99.0) | 82.9% (79.6 to 86.0) | 0.534 |
-| mean_entropy_router | 0.77 | 7.5% | 97.9% (96.5 to 99.0) | 82.0% (78.5 to 85.1) | 0.564 |
+| mean_entropy_router | 0.77 | 7.7% | 97.9% (96.5 to 99.0) | 81.9% (78.4 to 85.1) | 0.567 |
 | confidence_threshold | -15.00 | 18.7% | 98.8% (97.9 to 99.6) | 61.7% (56.5 to 66.9) | 1.199 |
 | random_matched_rate | 7.7% | 7.9% | 98.1% (96.7 to 99.0) | 83.9% (80.6 to 86.7) | 0.504 |
 | always_drafter | n/a | 0.0% | 97.9% (96.5 to 99.0) | 92.6% (92.3 to 92.8) | 0.233 |
@@ -121,7 +121,7 @@ the heavyweight is right, so the most any router can gain is 4.3 points.
 | Method | Threshold | Escalation | Accuracy (95% CI) | Cost reduction (95% CI) | USD / 1k requests |
 |---|---|---|---|---|---|
 | entropy_router | 2.00 | 5.3% | 93.0% (90.0 to 95.7) | 84.3% (81.4 to 87.0) | 0.293 |
-| mean_entropy_router | 0.40 | 5.0% | 94.3% (91.7 to 96.7) | 84.4% (81.0 to 87.3) | 0.290 |
+| mean_entropy_router | 0.40 | 5.3% | 94.3% (91.7 to 96.7) | 83.9% (80.1 to 86.9) | 0.301 |
 | confidence_threshold | -10.00 | 5.0% | 93.7% (90.7 to 96.3) | 83.8% (79.9 to 87.2) | 0.303 |
 | random_matched_rate | 5.3% | 5.3% | 92.7% (89.3 to 95.3) | 84.6% (81.4 to 87.3) | 0.288 |
 | always_drafter | n/a | 0.0% | 92.7% (89.3 to 95.3) | 90.2% (89.7 to 90.6) | 0.183 |
@@ -130,7 +130,7 @@ the heavyweight is right, so the most any router can gain is 4.3 points.
 
 entropy_router at T=2.0 caught 2 of 22 wrong drafts (TP 2, FP 14, FN 20).
 The mean-entropy variant caught 6 of 22 at the same escalation rate (TP 6,
-FP 9, FN 16). The intervals overlap, so this is suggestive, not conclusive.
+FP 10, FN 16). The intervals overlap, so this is suggestive, not conclusive.
 
 ## 5. MMLU (300 prompts, answer key)
 
@@ -141,7 +141,7 @@ is right.
 | Method | Threshold | Escalation | Accuracy (95% CI) | Cost reduction (95% CI) | USD / 1k requests |
 |---|---|---|---|---|---|
 | entropy_router | 2.00 | 18.7% | 77.3% (72.7 to 82.0) | 75.2% (70.4 to 79.9) | 0.549 |
-| mean_entropy_router | 0.77 | 18.3% | 79.3% (74.7 to 83.7) | 72.1% (66.6 to 77.1) | 0.617 |
+| mean_entropy_router | 0.77 | 18.7% | 79.3% (74.7 to 83.7) | 71.9% (66.3 to 76.9) | 0.623 |
 | confidence_threshold | -12.00 | 23.0% | 81.7% (77.0 to 86.0) | 62.6% (56.2 to 69.0) | 0.828 |
 | random_matched_rate | 18.7% | 18.7% | 76.7% (72.0 to 81.3) | 74.8% (69.7 to 79.1) | 0.558 |
 | always_drafter | n/a | 0.0% | 75.7% (71.0 to 80.3) | 92.7% (92.2 to 93.0) | 0.163 |
