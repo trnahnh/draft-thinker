@@ -87,6 +87,10 @@ confidence_threshold,-40.0000,ambiguous_creative,110,72,0.6545,1.0000,1.0000,0.2
 confidence_threshold,-40.0000,code_generation,110,6,0.0545,0.9904,0.9909,0.8531
 confidence_threshold,-40.0000,multi_step_reasoning,149,19,0.1275,0.9615,0.9664,0.7191
 confidence_threshold,-40.0000,simple_factual,150,0,0.0000,1.0000,1.0000,0.9492
+mean_entropy_router,0.7695,ambiguous_creative,110,39,0.3545,1.0000,1.0000,0.6323
+mean_entropy_router,0.7695,code_generation,110,0,0.0000,0.9909,0.9909,0.9150
+mean_entropy_router,0.7695,multi_step_reasoning,149,0,0.0000,0.9329,0.9329,0.9164
+mean_entropy_router,0.7695,simple_factual,150,0,0.0000,1.0000,1.0000,0.9492
 random_matched_rate,0.0771,ambiguous_creative,110,13,0.1182,1.0000,1.0000,0.8196
 random_matched_rate,0.0771,code_generation,110,6,0.0545,0.9904,0.9909,0.8497
 random_matched_rate,0.0771,multi_step_reasoning,149,11,0.0738,0.9348,0.9396,0.8458

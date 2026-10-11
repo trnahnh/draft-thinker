@@ -16,6 +16,7 @@ const (
 	MethodAlwaysDrafter       Method = "always_drafter"
 	MethodRandom              Method = "random_matched_rate"
 	MethodOracle              Method = "oracle"
+	MethodMeanEntropy         Method = "mean_entropy_router"
 )
 
 // Decision is the outcome of replaying a policy over a drafter trace.
@@ -94,5 +95,23 @@ func RandomPolicy(rate float64, seed int64) EscalationPolicy {
 func OraclePolicy() EscalationPolicy {
 	return func(r *collect.Record) Decision {
 		return Decision{Escalate: !r.Judge.Acceptable, TokensConsumed: len(r.Tokens)}
+	}
+}
+
+// MeanEntropyPolicy escalates when the trace-wide mean per-token entropy
+// exceeds threshold. Unlike the windowed router it needs the complete
+// draft before deciding, so it cannot early-exit or speculate, but it is
+// insensitive to a single uncertain window.
+func MeanEntropyPolicy(threshold float64) EscalationPolicy {
+	return func(r *collect.Record) Decision {
+		return Decision{Escalate: r.MeanEntropy > threshold, TokensConsumed: len(r.Tokens)}
+	}
+}
+
+// ScoreThresholdPolicy turns any ScoreFunc into a policy that escalates
+// when score > threshold after reading the whole draft.
+func ScoreThresholdPolicy(score ScoreFunc, threshold float64) EscalationPolicy {
+	return func(r *collect.Record) Decision {
+		return Decision{Escalate: score(r) > threshold, TokensConsumed: len(r.Tokens)}
 	}
 }

@@ -156,7 +156,10 @@ func main() {
 	drafterStats := sweep.ComputeStatsWithPolicy(valid, sweep.MethodAlwaysDrafter, 0, sweep.AlwaysDrafterPolicy(), pricing)
 	heavyStats := sweep.ComputeStatsWithPolicy(valid, sweep.MethodAlwaysHeavyweight, 0, sweep.AlwaysHeavyweightPolicy(), pricing)
 	oracleStats := sweep.ComputeStatsWithPolicy(valid, sweep.MethodOracle, 0, sweep.OraclePolicy(), pricing)
-	allStats = append(allStats, randomStats, drafterStats, heavyStats, oracleStats)
+	meanThreshold := sweep.ThresholdForRate(valid, sweep.MeanEntropyScore, headline.EscalationRate)
+	meanPolicy := sweep.MeanEntropyPolicy(meanThreshold)
+	meanStats := sweep.ComputeStatsWithPolicy(valid, sweep.MethodMeanEntropy, meanThreshold, meanPolicy, pricing)
+	allStats = append(allStats, meanStats, randomStats, drafterStats, heavyStats, oracleStats)
 	sum.BaselineCostPer1K = heavyStats.BaselineCostPer1K
 
 	if err := writeCSV(*output, func(f *os.File) error { return sweep.WriteComparisonCSV(f, allStats) }); err != nil {
@@ -188,6 +191,7 @@ func main() {
 	}{
 		{"entropy_window_peak", sweep.EntropyScore(replayCfg)},
 		{"mean_entropy", sweep.MeanEntropyScore},
+		{"frac_tokens_above_1bit", sweep.HighEntropyFraction(1.0)},
 		{"neg_min_logprob", sweep.MinLogprobScore},
 	}
 	for _, s := range scores {
@@ -212,6 +216,7 @@ func main() {
 		}{
 			{headline, sweep.EntropyPolicy(headline.Threshold, replayCfg), "calibrated production threshold"},
 			{closest, sweep.ConfidencePolicy(closest.Threshold), "closest cost reduction to entropy_router"},
+			{meanStats, meanPolicy, "trace-mean entropy, threshold matched to entropy_router escalation rate"},
 			{randomStats, randomPolicy, "same escalation rate as entropy_router, chosen blind"},
 			{drafterStats, sweep.AlwaysDrafterPolicy(), "cost floor"},
 			{heavyStats, sweep.AlwaysHeavyweightPolicy(), "cost ceiling"},

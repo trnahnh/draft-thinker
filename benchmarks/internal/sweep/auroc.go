@@ -56,6 +56,49 @@ func MeanEntropyScore(r *collect.Record) float64 {
 	return r.MeanEntropy
 }
 
+// HighEntropyFraction is the share of tokens whose entropy exceeds the
+// given number of bits, a measure of how much of the response was
+// generated under uncertainty rather than how uncertain the worst moment was.
+func HighEntropyFraction(bits float64) ScoreFunc {
+	return func(r *collect.Record) float64 {
+		if len(r.Tokens) == 0 {
+			return 0
+		}
+		n := 0
+		for _, t := range r.Tokens {
+			if t.Entropy > bits {
+				n++
+			}
+		}
+		return float64(n) / float64(len(r.Tokens))
+	}
+}
+
+// ThresholdForRate returns the score threshold at which escalating when
+// score > threshold yields approximately the requested escalation rate on
+// the given records. It is the (1-rate) quantile of the score, which makes
+// rate-matched comparisons between scores deterministic.
+func ThresholdForRate(records []*collect.Record, score ScoreFunc, rate float64) float64 {
+	vals := make([]float64, 0, len(records))
+	for _, r := range records {
+		if r.Error == "" {
+			vals = append(vals, score(r))
+		}
+	}
+	if len(vals) == 0 {
+		return 0
+	}
+	sort.Float64s(vals)
+	k := int(float64(len(vals)) * (1 - rate))
+	if k >= len(vals) {
+		k = len(vals) - 1
+	}
+	if k < 0 {
+		k = 0
+	}
+	return vals[k]
+}
+
 // AUROC computes the area under the ROC curve for score as a detector of
 // unacceptable drafts (the positive class). Ties are counted as half.
 // 0.5 means the score carries no information about draft quality.

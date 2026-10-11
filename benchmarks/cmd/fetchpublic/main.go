@@ -25,6 +25,7 @@ const (
 	gsm8kURL     = "https://raw.githubusercontent.com/openai/grade-school-math/master/grade_school_math/data/test.jsonl"
 	mmluRowsURL  = "https://datasets-server.huggingface.co/rows?dataset=cais/mmlu&config=all&split=test"
 	mmluTestRows = 14042
+	mmluPacing   = 1500 * time.Millisecond
 )
 
 func main() {
@@ -140,49 +141,61 @@ type mmluRowsResponse struct {
 }
 
 // fetchMMLU samples rows from the Hugging Face datasets-server rows API.
-// The test split is ordered by subject, so it draws n distinct random row
-// offsets one at a time rather than contiguous pages, which would collapse
-// the sample onto a handful of subjects.
+// The test split is ordered by subject, so it draws small pages (five rows)
+// at many distinct random offsets rather than one large page, which would
+// collapse the sample onto a handful of subjects. Requests are paced
+// because the API rate-limits aggressively.
 func fetchMMLU(c *http.Client, rng *rand.Rand, n int) ([]dataset.Prompt, error) {
-	perm := rng.Perm(mmluTestRows)
-	if n > len(perm) {
-		n = len(perm)
+	const pageLen = 5
+	pages := (n + pageLen - 1) / pageLen
+	maxStart := mmluTestRows - pageLen
+	perm := rng.Perm(maxStart)
+	if pages > len(perm) {
+		pages = len(perm)
 	}
-	offsets := perm[:n]
+	offsets := perm[:pages]
 	sort.Ints(offsets)
 
+	letters := []string{"A", "B", "C", "D"}
 	prompts := make([]dataset.Prompt, 0, n)
 	for i, off := range offsets {
-		url := fmt.Sprintf("%s&offset=%d&length=1", mmluRowsURL, off)
+		if i > 0 {
+			time.Sleep(mmluPacing)
+		}
+		url := fmt.Sprintf("%s&offset=%d&length=%d", mmluRowsURL, off, pageLen)
 		var parsed mmluRowsResponse
 		if err := getJSONWithRetry(c, url, &parsed); err != nil {
 			return nil, fmt.Errorf("offset %d: %w", off, err)
 		}
-		if len(parsed.Rows) != 1 {
-			return nil, fmt.Errorf("offset %d: expected 1 row, got %d", off, len(parsed.Rows))
+		if len(parsed.Rows) != pageLen {
+			return nil, fmt.Errorf("offset %d: expected %d rows, got %d", off, pageLen, len(parsed.Rows))
 		}
-		row := parsed.Rows[0].Row
-		if len(row.Choices) != 4 || row.Answer < 0 || row.Answer > 3 {
-			return nil, fmt.Errorf("offset %d: unexpected choices/answer shape", off)
+		for _, pr := range parsed.Rows {
+			if len(prompts) >= n {
+				break
+			}
+			row := pr.Row
+			if len(row.Choices) != 4 || row.Answer < 0 || row.Answer > 3 {
+				return nil, fmt.Errorf("row %d: unexpected choices/answer shape", pr.RowIdx)
+			}
+			var b strings.Builder
+			b.WriteString(strings.TrimSpace(row.Question))
+			b.WriteString("\n\n")
+			for j, choice := range row.Choices {
+				fmt.Fprintf(&b, "%s. %s\n", letters[j], strings.TrimSpace(choice))
+			}
+			b.WriteString("\nThink step by step briefly, then on the last line write only: Answer: <letter>")
+			prompts = append(prompts, dataset.Prompt{
+				ID:       fmt.Sprintf("mmlu_%04d", len(prompts)+1),
+				Category: dataset.MMLU,
+				Text:     b.String(),
+				Answer:   letters[row.Answer],
+				Grading:  "choice",
+				Subject:  fmt.Sprintf("%s (test_row_%d)", row.Subject, pr.RowIdx),
+			})
 		}
-		letters := []string{"A", "B", "C", "D"}
-		var b strings.Builder
-		b.WriteString(strings.TrimSpace(row.Question))
-		b.WriteString("\n\n")
-		for j, choice := range row.Choices {
-			fmt.Fprintf(&b, "%s. %s\n", letters[j], strings.TrimSpace(choice))
-		}
-		b.WriteString("\nThink step by step briefly, then on the last line write only: Answer: <letter>")
-		prompts = append(prompts, dataset.Prompt{
-			ID:       fmt.Sprintf("mmlu_%04d", i+1),
-			Category: dataset.MMLU,
-			Text:     b.String(),
-			Answer:   letters[row.Answer],
-			Grading:  "choice",
-			Subject:  row.Subject,
-		})
-		if (i+1)%50 == 0 {
-			log.Printf("mmlu: fetched %d/%d", i+1, n)
+		if (i+1)%10 == 0 {
+			log.Printf("mmlu: fetched %d/%d pages", i+1, pages)
 		}
 	}
 	return prompts, nil
@@ -190,9 +203,9 @@ func fetchMMLU(c *http.Client, rng *rand.Rand, n int) ([]dataset.Prompt, error) 
 
 func getJSONWithRetry(c *http.Client, url string, out any) error {
 	var lastErr error
-	for attempt := range 4 {
+	for attempt := range 6 {
 		if attempt > 0 {
-			time.Sleep(time.Duration(attempt*attempt) * time.Second)
+			time.Sleep(time.Duration(5*attempt*attempt) * time.Second)
 		}
 		resp, err := c.Get(url)
 		if err != nil {
