@@ -20,12 +20,12 @@ export const viewport: Viewport = {
 export const metadata: Metadata = {
   title: "Draft-Thinker | Cost-Aware LLM Gateway",
   description:
-    "Entropy-based routing reduces LLM inference costs by 91.6% while maintaining 98.2% accuracy. Measured on 518 prompts with real OpenAI APIs.",
+    "Entropy-based routing cuts measured LLM inference cost by 82.9% (95% CI 79.6 to 86.0) at 98.1% judged accuracy on 519 prompts with real OpenAI APIs, with honest baselines.",
   metadataBase: new URL("https://draft-thinker.vercel.app"),
   openGraph: {
     title: "Draft-Thinker | Cost-Aware LLM Gateway",
     description:
-      "Entropy-based routing reduces LLM inference costs by 91.6% while maintaining 98.2% accuracy. Measured on 518 prompts with real OpenAI APIs.",
+      "Entropy-based routing cuts measured LLM inference cost by 82.9% (95% CI 79.6 to 86.0) at 98.1% judged accuracy on 519 prompts with real OpenAI APIs, with honest baselines.",
     url: "https://draft-thinker.vercel.app",
     siteName: "Draft-Thinker",
     type: "website",
@@ -34,7 +34,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Draft-Thinker | Cost-Aware LLM Gateway",
     description:
-      "Entropy-based routing reduces LLM inference costs by 91.6% while maintaining 98.2% accuracy.",
+      "Entropy-based routing cuts measured LLM inference cost by 82.9% at 98.1% judged accuracy on 519 prompts.",
   },
 };
 

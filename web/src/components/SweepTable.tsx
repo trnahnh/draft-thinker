@@ -1,11 +1,11 @@
 const data = [
-  { t: "1.00", esc: 68.9, acc: 100.0, cost: 8.2, n_acc: 161, n_esc: 357 },
-  { t: "1.25", esc: 49.2, acc: 99.6, cost: 31.0, n_acc: 263, n_esc: 255 },
-  { t: "1.50", esc: 30.9, acc: 98.6, cost: 56.2, n_acc: 358, n_esc: 160 },
-  { t: "1.75", esc: 13.9, acc: 98.4, cost: 81.2, n_acc: 446, n_esc: 72 },
-  { t: "2.00", esc: 6.0, acc: 98.2, cost: 91.6, n_acc: 487, n_esc: 31 },
-  { t: "2.25", esc: 0.4, acc: 97.9, cost: 99.0, n_acc: 516, n_esc: 2 },
-  { t: "2.50", esc: 0.0, acc: 97.9, cost: 99.2, n_acc: 518, n_esc: 0 },
+  { t: "1.00", esc: 68.0, acc: 100.0, cost: 3.6, n_acc: 166, n_esc: 353 },
+  { t: "1.25", esc: 48.5, acc: 99.8, cost: 24.4, n_acc: 267, n_esc: 252 },
+  { t: "1.50", esc: 32.6, acc: 99.0, cost: 46.4, n_acc: 350, n_esc: 169 },
+  { t: "1.75", esc: 15.6, acc: 98.3, cost: 73.2, n_acc: 438, n_esc: 81 },
+  { t: "2.00", esc: 7.7, acc: 98.1, cost: 82.9, n_acc: 479, n_esc: 40 },
+  { t: "2.25", esc: 0.8, acc: 97.9, cost: 91.9, n_acc: 515, n_esc: 4 },
+  { t: "2.50", esc: 0.0, acc: 97.9, cost: 92.6, n_acc: 519, n_esc: 0 },
 ];
 
 export default function SweepTable() {
