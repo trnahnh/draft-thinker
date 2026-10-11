@@ -1,16 +1,20 @@
 """Plot cost-reduction vs accuracy tradeoff for every routing method.
 
 Reads a comparison CSV produced by cmd/compare and writes a PNG. Swept
-methods (entropy router, confidence threshold) are drawn as curves; the
-single-point baselines (always drafter, always heavyweight, rate-matched
-random, mean-entropy router, oracle) as markers. Standalone script, not
-part of the Go build.
+methods (entropy router, confidence threshold, learned routers) are drawn
+as curves; the single-point baselines (always drafter, always heavyweight,
+rate-matched random, mean-entropy router, oracle) as markers. When the
+matching compare JSON summary exists next to the CSV, bootstrap 95%
+intervals are drawn as error bars on every method that was bootstrapped.
+Standalone script, not part of the Go build.
 
     python benchmarks/plot_tradeoff.py
     python benchmarks/plot_tradeoff.py benchmarks/results/compare_gsm8k.csv benchmarks/results/tradeoff_gsm8k.png "GSM8K (n=300)"
 """
 
 import csv
+import json
+import os
 import sys
 from collections import defaultdict
 
@@ -23,6 +27,7 @@ CURVES = {
     "entropy_router": ("Entropy router (windowed, swept T)", "#2a78d6", "o"),
     "confidence_threshold": ("Confidence threshold (min logprob, swept)", "#eb6834", "s"),
 }
+LEARNED_STYLE = [("#5b3fbf", "v"), ("#8a6d1f", "<"), ("#2f7d5b", ">"), ("#9c2f2f", "h")]
 POINTS = {
     "always_heavyweight": ("Always heavyweight", "#1baf7a", "*", 200),
     "always_drafter": ("Always drafter", "#7a7a72", "D", 90),
@@ -47,6 +52,33 @@ def load_rows(path):
     return by_method
 
 
+def load_intervals(csv_path):
+    """Bootstrap intervals keyed by (method, rounded threshold)."""
+    json_path = os.path.splitext(csv_path)[0] + ".json"
+    if not os.path.exists(json_path):
+        return {}
+    with open(json_path, encoding="utf-8") as f:
+        summary = json.load(f)
+    out = {}
+    for h in summary.get("headline", []):
+        key = (h["method"], round(h["threshold"], 4))
+        out[key] = (
+            (h["cost_reduction_ci_lower"] * 100, h["cost_reduction_ci_upper"] * 100),
+            (h["accuracy_ci_lower"] * 100, h["accuracy_ci_upper"] * 100),
+        )
+    return out
+
+
+def errorbar(ax, intervals, method, row, color):
+    ci = intervals.get((method, round(row["threshold"], 4)))
+    if not ci:
+        return
+    (xl, xu), (yl, yu) = ci
+    x, y = row["cost_reduction"], row["overall_accuracy"]
+    ax.errorbar([x], [y], xerr=[[x - xl], [xu - x]], yerr=[[y - yl], [yu - y]],
+                fmt="none", ecolor=color, elinewidth=0.9, capsize=2, alpha=0.6, zorder=1)
+
+
 def main():
     inp = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_INPUT
     out = sys.argv[2] if len(sys.argv) > 2 else DEFAULT_OUTPUT
@@ -56,6 +88,7 @@ def main():
     if not by_method:
         print(f"no rows found in {inp}", file=sys.stderr)
         sys.exit(1)
+    intervals = load_intervals(inp)
 
     fig, ax = plt.subplots(figsize=(8.5, 6), dpi=150)
     fig.patch.set_facecolor("#fcfcfb")
@@ -67,7 +100,14 @@ def main():
     for spine in ("left", "bottom"):
         ax.spines[spine].set_color("#c3c2b7")
 
-    for method, (label, color, marker) in CURVES.items():
+    curves = dict(CURVES)
+    learned = sorted(m for m in by_method if m.startswith("learned_"))
+    for i, method in enumerate(learned):
+        color, marker = LEARNED_STYLE[i % len(LEARNED_STYLE)]
+        label = method.replace("learned_", "Learned router: ").replace("_", " ")
+        curves[method] = (label + " (swept tau)", color, marker)
+
+    for method, (label, color, marker) in curves.items():
         rows = sorted(by_method.get(method, []), key=lambda r: r["threshold"])
         if not rows:
             continue
@@ -77,6 +117,7 @@ def main():
         ax.scatter(xs, ys, s=45, marker=marker, color=color, label=label,
                    zorder=3, edgecolors="white", linewidths=0.6)
         for r in rows:
+            errorbar(ax, intervals, method, r, color)
             if method == "entropy_router" and abs(r["threshold"] - 2.0) < 1e-6:
                 ax.annotate("T=2.0", (r["cost_reduction"], r["overall_accuracy"]),
                             textcoords="offset points", xytext=(8, -12), fontsize=8, color="#52514e")
@@ -86,16 +127,20 @@ def main():
         if not rows:
             continue
         r = rows[0]
+        errorbar(ax, intervals, method, r, color)
         ax.scatter([r["cost_reduction"]], [r["overall_accuracy"]], s=size, marker=marker,
                    color=color, label=label, zorder=4, edgecolors="white", linewidths=0.8)
 
     ax.set_xlabel("Cost reduction vs always-heavyweight (%)", fontsize=11, color="#0b0b0b")
     ax.set_ylabel("Served accuracy (%)", fontsize=11, color="#0b0b0b")
-    ax.set_title(f"Cost reduction vs accuracy: {subtitle}", fontsize=12, color="#0b0b0b", pad=12)
+    title = f"Cost reduction vs accuracy: {subtitle}"
+    if intervals:
+        title += "\nerror bars: bootstrap 95% CI (2000 resamples)"
+    ax.set_title(title, fontsize=12, color="#0b0b0b", pad=12)
     ax.set_xlim(-10, 100)
     ax.tick_params(colors="#52514e", labelsize=9)
 
-    legend = ax.legend(loc="lower left", frameon=False, fontsize=8)
+    legend = ax.legend(loc="lower left", frameon=False, fontsize=7.5)
     for text in legend.get_texts():
         text.set_color("#0b0b0b")
 

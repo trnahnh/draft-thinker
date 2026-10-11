@@ -1,0 +1,51 @@
+{
+  "input": "benchmarks/results/collected_mmlu.jsonl.gz",
+  "records": 300,
+  "similarity_threshold": 0.95,
+  "embedding_model": "text-embedding-3-small",
+  "inserted_accepted_drafts": 241,
+  "hits": 3,
+  "hit_rate": 0.01,
+  "hits_wrong_for_new_prompt": 1,
+  "hits_with_ground_truth": 3,
+  "nearest_similarity_quantiles": {
+    "p100": 1,
+    "p50": 0.5832599352582496,
+    "p90": 0.8988125347649336,
+    "p99": 0.9456491494537683
+  },
+  "prompts_with_neighbour_above": {
+    "0.80": 33,
+    "0.85": 31,
+    "0.90": 30,
+    "0.95": 3
+  },
+  "wrong_answer_hits_if_threshold_were": {
+    "0.80": 20,
+    "0.85": 20,
+    "0.90": 19,
+    "0.95": 1
+  },
+  "lookup_p50_ms": 201.138,
+  "lookup_p99_ms": 360.08,
+  "hit_examples": [
+    {
+      "prompt_id": "mmlu_0136",
+      "source_prompt_id": "mmlu_0134",
+      "score": 1,
+      "cached_answer_correct_for_new_prompt": true
+    },
+    {
+      "prompt_id": "mmlu_0137",
+      "source_prompt_id": "mmlu_0135",
+      "score": 0.9999999999999999,
+      "cached_answer_correct_for_new_prompt": true
+    },
+    {
+      "prompt_id": "mmlu_0197",
+      "source_prompt_id": "mmlu_0192",
+      "score": 0.9586171564832127,
+      "cached_answer_correct_for_new_prompt": false
+    }
+  ]
+}

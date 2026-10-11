@@ -142,22 +142,40 @@ func (m *LearnedModel) Probability(x []float64) float64 {
 	return p
 }
 
-// Score returns the calibrated probability for a record. Higher means
-// more likely to need escalation, matching the other ScoreFuncs.
+// Score returns the raw (uncalibrated) probability for a record. Higher
+// means more likely to need escalation, matching the other ScoreFuncs. The
+// raw score is used for AUROC and rate matching because isotonic
+// calibration is a step function whose ties make rate matching coarse.
 func (m *LearnedModel) Score(r *collect.Record) float64 {
+	return m.RawProbability(ExtractFeatures(r, m.featureConfig()))
+}
+
+// CalibratedScore is the calibrated probability that the draft is wrong,
+// the quantity the exported operating points threshold.
+func (m *LearnedModel) CalibratedScore(r *collect.Record) float64 {
 	return m.Probability(ExtractFeatures(r, m.featureConfig()))
 }
 
-// Policy escalates when the calibrated probability exceeds tau. A prefix
-// model decides after PrefixTokens drafter tokens, so TokensConsumed
-// reflects the early exit; a full-trace model consumes the whole draft.
+// Policy escalates when the raw probability exceeds tau. A prefix model
+// decides after PrefixTokens drafter tokens, so TokensConsumed reflects
+// the early exit; a full-trace model consumes the whole draft.
 func (m *LearnedModel) Policy(tau float64) EscalationPolicy {
+	return m.policy(m.Score, tau)
+}
+
+// CalibratedPolicy escalates when the calibrated probability exceeds tau,
+// for replaying the operating points chosen on the calibration split.
+func (m *LearnedModel) CalibratedPolicy(tau float64) EscalationPolicy {
+	return m.policy(m.CalibratedScore, tau)
+}
+
+func (m *LearnedModel) policy(score ScoreFunc, tau float64) EscalationPolicy {
 	return func(r *collect.Record) Decision {
 		consumed := len(r.Tokens)
 		if m.PrefixTokens > 0 && m.PrefixTokens < consumed {
 			consumed = m.PrefixTokens
 		}
-		return Decision{Escalate: m.Score(r) > tau, TokensConsumed: consumed}
+		return Decision{Escalate: score(r) > tau, TokensConsumed: consumed}
 	}
 }
 

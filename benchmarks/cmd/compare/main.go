@@ -201,9 +201,9 @@ func main() {
 			if op.Tau < 0 {
 				continue
 			}
-			st := sweep.ComputeStatsWithPolicy(valid, method, op.Tau, model.Policy(op.Tau), pricing)
+			st := sweep.ComputeStatsWithPolicy(valid, method, op.Tau, model.CalibratedPolicy(op.Tau), pricing)
 			allStats = append(allStats, st)
-			learnedRuns = append(learnedRuns, bootstrapRun{st, model.Policy(op.Tau), "calibrated operating point " + op.Name})
+			learnedRuns = append(learnedRuns, bootstrapRun{st, model.CalibratedPolicy(op.Tau), "calibrated operating point " + op.Name})
 		}
 		log.Printf("learned model %s (%s, prefix_tokens=%d): %d trees/coefs, %d operating points", model.Name, model.Kind, model.PrefixTokens, max(len(model.Trees), len(model.Coef)), len(model.Thresholds))
 	}

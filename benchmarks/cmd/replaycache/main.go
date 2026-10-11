@@ -114,7 +114,7 @@ func main() {
 	for i, r := range valid {
 		messages := []protocol.Message{{Role: "user", Content: r.PromptText}}
 		start := time.Now()
-		resp, err := store.Lookup(ctx, messages)
+		resp, err := lookupWithRetry(ctx, store, messages)
 		if err != nil {
 			log.Fatalf("%s: lookup: %v", r.PromptID, err)
 		}
@@ -149,7 +149,7 @@ func main() {
 		}
 		if !sweep.Replay(r.Tokens, *entropyThreshold, replayCfg).WouldEscalate {
 			cached := &protocol.ChatCompletionResponse{ID: r.PromptID, Object: "chat.completion", Choices: []protocol.Choice{{Message: &protocol.Message{Role: "assistant", Content: r.DraftResponse}}}}
-			if err := store.Insert(ctx, messages, cached); err != nil {
+			if err := insertWithRetry(ctx, store, messages, cached); err != nil {
 				log.Fatalf("%s: insert: %v", r.PromptID, err)
 			}
 			idx.tagLast(r.PromptID)
@@ -184,7 +184,7 @@ func main() {
 	if *repeat {
 		sum.RepeatPassExpected = sum.Inserted
 		for _, r := range valid {
-			resp, err := store.Lookup(ctx, []protocol.Message{{Role: "user", Content: r.PromptText}})
+			resp, err := lookupWithRetry(ctx, store, []protocol.Message{{Role: "user", Content: r.PromptText}})
 			if err != nil {
 				log.Fatalf("%s: repeat lookup: %v", r.PromptID, err)
 			}
@@ -214,6 +214,38 @@ func main() {
 		log.Fatalf("writing summary: %v", err)
 	}
 	log.Printf("wrote %s", *output)
+}
+
+// The embedding API occasionally times out; the gateway treats that as a
+// cache miss, but a replay needs every lookup to complete, so retry.
+func lookupWithRetry(ctx context.Context, store *cache.VectorStore, messages []protocol.Message) (*protocol.ChatCompletionResponse, error) {
+	var resp *protocol.ChatCompletionResponse
+	var err error
+	for attempt := range 4 {
+		if attempt > 0 {
+			time.Sleep(time.Duration(attempt*attempt) * 2 * time.Second)
+		}
+		resp, err = store.Lookup(ctx, messages)
+		if err == nil {
+			return resp, nil
+		}
+		log.Printf("lookup attempt %d failed: %v", attempt+1, err)
+	}
+	return nil, err
+}
+
+func insertWithRetry(ctx context.Context, store *cache.VectorStore, messages []protocol.Message, resp *protocol.ChatCompletionResponse) error {
+	var err error
+	for attempt := range 4 {
+		if attempt > 0 {
+			time.Sleep(time.Duration(attempt*attempt) * 2 * time.Second)
+		}
+		if err = store.Insert(ctx, messages, resp); err == nil {
+			return nil
+		}
+		log.Printf("insert attempt %d failed: %v", attempt+1, err)
+	}
+	return err
 }
 
 func quantile(sorted []float64, q float64) float64 {
