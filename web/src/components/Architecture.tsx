@@ -21,7 +21,7 @@ export default function Architecture() {
             <path
               d="M0 0.5 L8 4 L0 7.5"
               fill="none"
-              stroke="#3a3a3a"
+              stroke="var(--color-line)"
               strokeWidth="1.2"
             />
           </marker>
@@ -37,7 +37,7 @@ export default function Architecture() {
             <path
               d="M0 0.5 L8 4 L0 7.5"
               fill="none"
-              stroke="#00e676"
+              stroke="var(--color-green)"
               strokeWidth="1.2"
             />
           </marker>
@@ -53,7 +53,7 @@ export default function Architecture() {
             <path
               d="M0 0.5 L8 4 L0 7.5"
               fill="none"
-              stroke="#ff8800"
+              stroke="var(--color-orange)"
               strokeWidth="1.2"
             />
           </marker>
@@ -66,14 +66,14 @@ export default function Architecture() {
           width={100}
           height={30}
           rx={2}
-          fill="#0a0a0a"
-          stroke="#2a2a2a"
+          fill="var(--color-surface)"
+          stroke="var(--color-border-bright)"
         />
         <text
           x={255}
           y={23}
           textAnchor="middle"
-          fill="#eeeeee"
+          fill="var(--color-text)"
           fontSize={11}
           fontFamily={f}
           fontWeight={500}
@@ -86,7 +86,7 @@ export default function Architecture() {
           y1={34}
           x2={255}
           y2={58}
-          stroke="#3a3a3a"
+          stroke="var(--color-line)"
           markerEnd="url(#ad)"
         />
 
@@ -97,14 +97,14 @@ export default function Architecture() {
           width={150}
           height={36}
           rx={2}
-          fill="#0a0a0a"
-          stroke="#2a2a2a"
+          fill="var(--color-surface)"
+          stroke="var(--color-border-bright)"
         />
         <text
           x={255}
           y={75}
           textAnchor="middle"
-          fill="#eeeeee"
+          fill="var(--color-text)"
           fontSize={11}
           fontFamily={f}
           fontWeight={500}
@@ -115,7 +115,7 @@ export default function Architecture() {
           x={255}
           y={88}
           textAnchor="middle"
-          fill="#8a8a8a"
+          fill="var(--color-text-dark)"
           fontSize={9}
           fontFamily={f}
         >
@@ -127,7 +127,7 @@ export default function Architecture() {
           y1={94}
           x2={255}
           y2={120}
-          stroke="#3a3a3a"
+          stroke="var(--color-line)"
           markerEnd="url(#ad)"
         />
 
@@ -138,16 +138,16 @@ export default function Architecture() {
           width={160}
           height={38}
           rx={2}
-          fill="#0a0a0a"
-          stroke="#00d4ff"
+          fill="var(--color-surface)"
+          stroke="var(--color-cyan)"
           strokeOpacity={0.4}
         />
-        <rect x={175} y={120} width={3} height={38} fill="#00d4ff" rx={1} />
+        <rect x={175} y={120} width={3} height={38} fill="var(--color-cyan)" rx={1} />
         <text
           x={257}
           y={139}
           textAnchor="middle"
-          fill="#00d4ff"
+          fill="var(--color-cyan)"
           fontSize={11}
           fontFamily={f}
           fontWeight={500}
@@ -158,7 +158,7 @@ export default function Architecture() {
           x={257}
           y={152}
           textAnchor="middle"
-          fill="#8a8a8a"
+          fill="var(--color-text-dark)"
           fontSize={9}
           fontFamily={f}
         >
@@ -168,7 +168,7 @@ export default function Architecture() {
         {/* HIT fork */}
         <path
           d="M210 158 C210 184, 103 184, 103 206"
-          stroke="#00e676"
+          stroke="var(--color-green)"
           strokeOpacity={0.5}
           fill="none"
           markerEnd="url(#ag)"
@@ -177,7 +177,7 @@ export default function Architecture() {
           x={148}
           y={178}
           textAnchor="middle"
-          fill="#00e676"
+          fill="var(--color-green)"
           fontSize={9}
           fontFamily={f}
           fontWeight={500}
@@ -188,7 +188,7 @@ export default function Architecture() {
         {/* MISS fork */}
         <path
           d="M300 158 C300 184, 385 184, 385 206"
-          stroke="#3a3a3a"
+          stroke="var(--color-line)"
           strokeOpacity={0.5}
           fill="none"
           markerEnd="url(#ad)"
@@ -197,7 +197,7 @@ export default function Architecture() {
           x={348}
           y={178}
           textAnchor="middle"
-          fill="#8a8a8a"
+          fill="var(--color-text-dark)"
           fontSize={9}
           fontFamily={f}
         >
@@ -211,16 +211,16 @@ export default function Architecture() {
           width={150}
           height={30}
           rx={2}
-          fill="rgba(0,230,118,0.05)"
-          stroke="#00e676"
+          fill="var(--color-green-dim)"
+          stroke="var(--color-green)"
           strokeOpacity={0.3}
         />
-        <rect x={28} y={206} width={3} height={30} fill="#00e676" rx={1} />
+        <rect x={28} y={206} width={3} height={30} fill="var(--color-green)" rx={1} />
         <text
           x={105}
           y={225}
           textAnchor="middle"
-          fill="#00e676"
+          fill="var(--color-green)"
           fontSize={11}
           fontFamily={f}
           fontWeight={500}
@@ -235,16 +235,16 @@ export default function Architecture() {
           width={142}
           height={36}
           rx={2}
-          fill="#0a0a0a"
-          stroke="#00e676"
+          fill="var(--color-surface)"
+          stroke="var(--color-green)"
           strokeOpacity={0.4}
         />
-        <rect x={314} y={206} width={3} height={36} fill="#00e676" rx={1} />
+        <rect x={314} y={206} width={3} height={36} fill="var(--color-green)" rx={1} />
         <text
           x={387}
           y={223}
           textAnchor="middle"
-          fill="#00e676"
+          fill="var(--color-green)"
           fontSize={11}
           fontFamily={f}
           fontWeight={500}
@@ -255,7 +255,7 @@ export default function Architecture() {
           x={387}
           y={236}
           textAnchor="middle"
-          fill="#8a8a8a"
+          fill="var(--color-text-dark)"
           fontSize={9}
           fontFamily={f}
         >
@@ -267,7 +267,7 @@ export default function Architecture() {
           y1={242}
           x2={385}
           y2={270}
-          stroke="#3a3a3a"
+          stroke="var(--color-line)"
           markerEnd="url(#ad)"
         />
 
@@ -278,14 +278,14 @@ export default function Architecture() {
           width={178}
           height={38}
           rx={2}
-          fill="#0a0a0a"
-          stroke="#2a2a2a"
+          fill="var(--color-surface)"
+          stroke="var(--color-border-bright)"
         />
         <text
           x={385}
           y={289}
           textAnchor="middle"
-          fill="#eeeeee"
+          fill="var(--color-text)"
           fontSize={11}
           fontFamily={f}
           fontWeight={500}
@@ -296,7 +296,7 @@ export default function Architecture() {
           x={385}
           y={302}
           textAnchor="middle"
-          fill="#8a8a8a"
+          fill="var(--color-text-dark)"
           fontSize={9}
           fontFamily={f}
         >
@@ -306,7 +306,7 @@ export default function Architecture() {
         {/* H < T fork */}
         <path
           d="M340 308 C340 334, 276 334, 276 356"
-          stroke="#00e676"
+          stroke="var(--color-green)"
           strokeOpacity={0.5}
           fill="none"
           markerEnd="url(#ag)"
@@ -315,7 +315,7 @@ export default function Architecture() {
           x={300}
           y={328}
           textAnchor="middle"
-          fill="#00e676"
+          fill="var(--color-green)"
           fontSize={9}
           fontFamily={f}
           fontWeight={500}
@@ -326,7 +326,7 @@ export default function Architecture() {
         {/* H >= T fork */}
         <path
           d="M430 308 C430 334, 456 334, 456 356"
-          stroke="#ff8800"
+          stroke="var(--color-orange)"
           strokeOpacity={0.5}
           fill="none"
           markerEnd="url(#ao)"
@@ -335,7 +335,7 @@ export default function Architecture() {
           x={448}
           y={328}
           textAnchor="middle"
-          fill="#ff8800"
+          fill="var(--color-orange)"
           fontSize={9}
           fontFamily={f}
           fontWeight={500}
@@ -350,16 +350,16 @@ export default function Architecture() {
           width={120}
           height={36}
           rx={2}
-          fill="rgba(0,230,118,0.05)"
-          stroke="#00e676"
+          fill="var(--color-green-dim)"
+          stroke="var(--color-green)"
           strokeOpacity={0.3}
         />
-        <rect x={216} y={356} width={3} height={36} fill="#00e676" rx={1} />
+        <rect x={216} y={356} width={3} height={36} fill="var(--color-green)" rx={1} />
         <text
           x={278}
           y={373}
           textAnchor="middle"
-          fill="#00e676"
+          fill="var(--color-green)"
           fontSize={11}
           fontFamily={f}
           fontWeight={500}
@@ -370,7 +370,7 @@ export default function Architecture() {
           x={278}
           y={386}
           textAnchor="middle"
-          fill="#8a8a8a"
+          fill="var(--color-text-dark)"
           fontSize={9}
           fontFamily={f}
         >
@@ -384,16 +384,16 @@ export default function Architecture() {
           width={95}
           height={30}
           rx={2}
-          fill="rgba(255,136,0,0.05)"
-          stroke="#ff8800"
+          fill="var(--color-orange-dim)"
+          stroke="var(--color-orange)"
           strokeOpacity={0.3}
         />
-        <rect x={408} y={356} width={3} height={30} fill="#ff8800" rx={1} />
+        <rect x={408} y={356} width={3} height={30} fill="var(--color-orange)" rx={1} />
         <text
           x={457}
           y={375}
           textAnchor="middle"
-          fill="#ff8800"
+          fill="var(--color-orange)"
           fontSize={11}
           fontFamily={f}
           fontWeight={500}
@@ -406,7 +406,7 @@ export default function Architecture() {
           y1={386}
           x2={456}
           y2={408}
-          stroke="#ff8800"
+          stroke="var(--color-orange)"
           strokeOpacity={0.5}
           markerEnd="url(#ao)"
         />
@@ -418,16 +418,16 @@ export default function Architecture() {
           width={118}
           height={36}
           rx={2}
-          fill="rgba(255,61,61,0.05)"
-          stroke="#ff3d3d"
+          fill="var(--color-red-dim)"
+          stroke="var(--color-red)"
           strokeOpacity={0.3}
         />
-        <rect x={396} y={408} width={3} height={36} fill="#ff3d3d" rx={1} />
+        <rect x={396} y={408} width={3} height={36} fill="var(--color-red)" rx={1} />
         <text
           x={457}
           y={425}
           textAnchor="middle"
-          fill="#ff3d3d"
+          fill="var(--color-red)"
           fontSize={11}
           fontFamily={f}
           fontWeight={500}
@@ -438,7 +438,7 @@ export default function Architecture() {
           x={457}
           y={438}
           textAnchor="middle"
-          fill="#8a8a8a"
+          fill="var(--color-text-dark)"
           fontSize={9}
           fontFamily={f}
         >
@@ -449,7 +449,7 @@ export default function Architecture() {
           x={455}
           y={456}
           textAnchor="middle"
-          fill="#ffab00"
+          fill="var(--color-amber)"
           fontSize={8}
           fontFamily={f}
         >

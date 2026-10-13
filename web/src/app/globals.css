@@ -3,14 +3,28 @@
 @theme inline {
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+}
+
+/*
+  Theme tokens. Dark is the default and needs no attribute; the toggle
+  sets data-theme="light" on <html>, and a pre-hydration script in
+  layout.tsx restores the saved choice before first paint. Components
+  reference these through text-(--color-x), bg-(--color-x) and inline
+  var(--color-x), so nothing else knows which theme is active.
+*/
+:root {
+  color-scheme: dark;
   --color-bg: #050505;
+  --color-nav: rgba(5, 5, 5, 0.9);
   --color-surface: #0a0a0a;
   --color-surface-2: #0f0f0f;
   --color-border: #1a1a1a;
   --color-border-bright: #2a2a2a;
+  --color-line: #3a3a3a;
   --color-text: #eeeeee;
   --color-text-dim: #b8b8b8;
   --color-text-dark: #8a8a8a;
+  --color-on-accent: #000000;
   --color-orange: #ff8800;
   --color-orange-dim: rgba(255, 136, 0, 0.07);
   --color-orange-border: rgba(255, 136, 0, 0.3);
@@ -23,6 +37,35 @@
   --color-red-dim: rgba(255, 61, 61, 0.07);
   --color-amber: #ffab00;
   --color-amber-dim: rgba(255, 171, 0, 0.07);
+  --grid-line: rgba(0, 212, 255, 0.015);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --color-bg: #f5f5f3;
+  --color-nav: rgba(245, 245, 243, 0.9);
+  --color-surface: #ffffff;
+  --color-surface-2: #efefed;
+  --color-border: #e3e3e0;
+  --color-border-bright: #c9c9c5;
+  --color-line: #a8a8a3;
+  --color-text: #111111;
+  --color-text-dim: #3a3a3a;
+  --color-text-dark: #666663;
+  --color-on-accent: #ffffff;
+  --color-orange: #c45500;
+  --color-orange-dim: rgba(196, 85, 0, 0.08);
+  --color-orange-border: rgba(196, 85, 0, 0.35);
+  --color-cyan: #0369a1;
+  --color-cyan-dim: rgba(3, 105, 161, 0.09);
+  --color-cyan-border: rgba(3, 105, 161, 0.25);
+  --color-green: #0f7a3b;
+  --color-green-dim: rgba(15, 122, 59, 0.08);
+  --color-red: #c0262a;
+  --color-red-dim: rgba(192, 38, 42, 0.08);
+  --color-amber: #946200;
+  --color-amber-dim: rgba(148, 98, 0, 0.1);
+  --grid-line: rgba(3, 105, 161, 0.045);
 }
 
 body {
@@ -33,7 +76,19 @@ body {
 
 .grid-overlay {
   background-image:
-    linear-gradient(rgba(0, 212, 255, 0.015) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(0, 212, 255, 0.015) 1px, transparent 1px);
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
   background-size: 60px 60px;
+}
+
+.theme-icon-light {
+  display: none;
+}
+
+:root[data-theme="light"] .theme-icon-light {
+  display: block;
+}
+
+:root[data-theme="light"] .theme-icon-dark {
+  display: none;
 }

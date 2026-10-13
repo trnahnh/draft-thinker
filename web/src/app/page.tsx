@@ -5,6 +5,7 @@ import ConfusionMatrix from "@/components/ConfusionMatrix";
 import Architecture from "@/components/Architecture";
 import EntropyViz from "@/components/EntropyViz";
 import StateMachine from "@/components/StateMachine";
+import ThemeToggle from "@/components/ThemeToggle";
 import BenchmarkTable from "@/components/BenchmarkTable";
 import AurocChart from "@/components/AurocChart";
 import FactList from "@/components/FactList";
@@ -88,7 +89,7 @@ const tradeoffs = [
 export default function Home() {
   return (
     <div className="grid-overlay min-h-screen">
-      <nav className="sticky top-0 z-50 border-b border-(--color-border) bg-bg/90 backdrop-blur-sm">
+      <nav className="sticky top-0 z-50 border-b border-(--color-border) bg-(--color-nav) backdrop-blur-sm">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6">
           <div className="flex items-center gap-3">
             <span className="font-mono text-sm font-medium tracking-tight text-(--color-orange)">
@@ -112,6 +113,7 @@ export default function Home() {
             >
               SOURCE
             </a>
+            <ThemeToggle />
           </div>
         </div>
       </nav>

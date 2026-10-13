@@ -48,7 +48,7 @@ export default function SweepTable() {
                     {r.t}
                   </span>
                   {sel && (
-                    <span className="ml-2 bg-(--color-orange) px-1 py-px text-[9px] font-medium text-black">
+                    <span className="ml-2 bg-(--color-orange) px-1 py-px text-[9px] font-medium text-(--color-on-accent)">
                       SEL
                     </span>
                   )}

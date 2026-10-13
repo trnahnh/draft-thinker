@@ -148,17 +148,17 @@ export function LoadTestTable() {
               <th className={th}>p50</th>
               <th className={`${th} hidden sm:table-cell`}>p95</th>
               <th className={th}>p99</th>
-              <th className={`${th} hidden md:table-cell`}>Decisions</th>
+              <th className={`${th} hidden xl:table-cell`}>Decisions</th>
             </tr>
           </thead>
           <tbody>
             {load.map((r) => (
               <tr key={r.s}>
-                <td className={`${td} text-left`}>
-                  <span className="text-(--color-text)">{r.s}</span>
-                  <span className="ml-2 hidden text-[10px] text-(--color-text-dark) sm:inline">
+                <td className="border-b border-(--color-border) py-2.5 text-left">
+                  <div className="text-(--color-text)">{r.s}</div>
+                  <div className="text-[10px] text-(--color-text-dark)">
                     {r.desc}
-                  </span>
+                  </div>
                 </td>
                 <td className={`${td} text-(--color-green)`}>100%</td>
                 <td className={`${td} text-(--color-text-dim)`}>{r.p50.toFixed(1)} ms</td>
@@ -168,7 +168,7 @@ export function LoadTestTable() {
                 <td className={`${td} ${r.p99 > 1000 ? "text-(--color-amber)" : "text-(--color-text-dim)"}`}>
                   {r.p99.toFixed(1)} ms
                 </td>
-                <td className={`${td} hidden text-(--color-text-dark) md:table-cell`}>
+                <td className={`${td} hidden text-(--color-text-dark) xl:table-cell`}>
                   {r.dec}
                 </td>
               </tr>

@@ -33,7 +33,7 @@ export default function CostBar() {
                 style={{ width: `${d.cost}%` }}
               />
               {sel && (
-                <span className="absolute left-2 top-1/2 -translate-y-1/2 font-mono text-[10px] font-medium text-black">
+                <span className="absolute left-2 top-1/2 -translate-y-1/2 font-mono text-[10px] font-medium text-(--color-on-accent)">
                   {d.cost}%
                 </span>
               )}
