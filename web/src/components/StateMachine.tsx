@@ -8,7 +8,7 @@ const states = [
   {
     name: "SPECULATING",
     cond: "H(X) > 0.8*T",
-    desc: "Soft threshold crossed. Heavyweight fires in parallel via goroutine.",
+    desc: "Any single token above 0.8T starts the heavyweight in a goroutine. Replay shows this fires on 70 to 89% of requests; disabling it is the documented recommendation.",
     color: "var(--color-amber)",
   },
   {
@@ -20,7 +20,7 @@ const states = [
   {
     name: "ESCALATED",
     cond: "H(X) >= T",
-    desc: "Heavyweight response used. Speculative head start reduces tail latency.",
+    desc: "Heavyweight response used. Measured head start is 26 to 37 ms at the median, and most escalations get none because a token above T escalates before any speculative call starts.",
     color: "var(--color-red)",
   },
 ];
