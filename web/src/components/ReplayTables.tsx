@@ -1,6 +1,9 @@
-const th =
-  "border-b border-(--color-border) pb-2.5 text-right font-normal whitespace-nowrap";
-const td = "border-b border-(--color-border) py-2.5 text-right whitespace-nowrap";
+const thBase = "border-b border-(--color-border) pb-2.5 font-normal whitespace-nowrap";
+const tdBase = "border-b border-(--color-border) py-2.5 whitespace-nowrap";
+const thFirst = `${thBase} text-left`;
+const tdFirst = `${tdBase} text-left`;
+const th = `${thBase} pl-3 text-right`;
+const td = `${tdBase} pl-3 text-right`;
 
 const spec = [
   { t: "Project set", n: 519, esc: 40, trig: 70.5, cancel: 96.4, head: "13 of 40", p50: 36, per1k: 680 },
@@ -18,7 +21,7 @@ export function SpeculativeTable() {
         <table className="w-full font-mono text-xs">
           <thead>
             <tr className="text-[10px] uppercase tracking-widest text-(--color-text-dark)">
-              <th className={`${th} text-left`}>Trace</th>
+              <th className={thFirst}>Trace</th>
               <th className={`${th} hidden sm:table-cell`}>Escal</th>
               <th className={`${th} text-(--color-amber)`}>Trigger%</th>
               <th className={`${th} text-(--color-red)`}>Cancel%</th>
@@ -30,7 +33,7 @@ export function SpeculativeTable() {
           <tbody>
             {spec.map((r) => (
               <tr key={r.t}>
-                <td className={`${td} text-left text-(--color-text)`}>
+                <td className={`${tdFirst} text-(--color-text)`}>
                   {r.t}
                   <span className="ml-2 text-[10px] text-(--color-text-dark)">
                     n={r.n}
@@ -78,7 +81,7 @@ export function CacheTable() {
         <table className="w-full font-mono text-xs">
           <thead>
             <tr className="text-[10px] uppercase tracking-widest text-(--color-text-dark)">
-              <th className={`${th} text-left`}>Trace</th>
+              <th className={thFirst}>Trace</th>
               <th className={`${th} text-(--color-cyan)`}>Hits</th>
               <th className={`${th} text-(--color-red)`}>Wrong</th>
               <th className={th}>NN max</th>
@@ -88,7 +91,7 @@ export function CacheTable() {
           <tbody>
             {cache.map((r) => (
               <tr key={r.t}>
-                <td className={`${td} text-left text-(--color-text)`}>
+                <td className={`${tdFirst} text-(--color-text)`}>
                   {r.t}
                   <span className="ml-2 text-[10px] text-(--color-text-dark)">
                     n={r.n}
@@ -143,7 +146,7 @@ export function LoadTestTable() {
         <table className="w-full font-mono text-xs">
           <thead>
             <tr className="text-[10px] uppercase tracking-widest text-(--color-text-dark)">
-              <th className={`${th} text-left`}>Scenario</th>
+              <th className={thFirst}>Scenario</th>
               <th className={th}>Success</th>
               <th className={th}>p50</th>
               <th className={`${th} hidden sm:table-cell`}>p95</th>

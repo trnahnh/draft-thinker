@@ -64,7 +64,7 @@ export default function EntropyViz() {
               className="absolute top-0 h-full w-px bg-(--color-red) opacity-50"
               style={{ left: `${(T / MAX) * 100}%` }}
             />
-            <div className="absolute right-2 top-1/2 -translate-y-1/2 flex gap-3 font-mono text-[10px]">
+            <div className="absolute right-2 top-1/2 -translate-y-1/2 flex gap-3 font-mono text-[10px] max-sm:hidden">
               <span className="text-(--color-text-dark)">
                 avg {ex.mean.toFixed(3)}
               </span>
@@ -72,6 +72,14 @@ export default function EntropyViz() {
                 peak {ex.max.toFixed(3)}
               </span>
             </div>
+          </div>
+          <div className="mt-1 flex gap-3 font-mono text-[10px] sm:hidden">
+            <span className="text-(--color-text-dark)">
+              avg {ex.mean.toFixed(3)}
+            </span>
+            <span className="text-(--color-text-dim)">
+              peak {ex.max.toFixed(3)}
+            </span>
           </div>
         </div>
       ))}

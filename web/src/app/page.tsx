@@ -26,7 +26,7 @@ function Panel({
 }) {
   return (
     <div
-      className={`border border-(--color-border) bg-(--color-surface) ${className}`}
+      className={`min-w-0 border border-(--color-border) bg-(--color-surface) ${className}`}
     >
       <div className="border-b border-(--color-border) px-4 py-2.5 sm:px-5">
         <span className="font-mono text-[10px] uppercase tracking-[0.15em] text-(--color-text-dark)">

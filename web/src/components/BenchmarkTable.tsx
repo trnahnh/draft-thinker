@@ -104,9 +104,12 @@ const rows: Row[] = [
   },
 ];
 
-const th =
-  "border-b border-(--color-border) pb-2.5 text-right font-normal whitespace-nowrap";
-const td = "border-b border-(--color-border) py-2.5 text-right whitespace-nowrap";
+const thBase = "border-b border-(--color-border) pb-2.5 font-normal whitespace-nowrap";
+const tdBase = "border-b border-(--color-border) py-2.5 whitespace-nowrap";
+const thFirst = `${thBase} text-left`;
+const tdFirst = `${tdBase} text-left`;
+const th = `${thBase} pl-3 text-right`;
+const td = `${tdBase} pl-3 text-right`;
 
 function delta(a: number, b: number) {
   const d = a - b;
@@ -127,7 +130,7 @@ export default function BenchmarkTable() {
       <table className="w-full font-mono text-xs">
         <thead>
           <tr className="text-[10px] uppercase tracking-widest text-(--color-text-dark)">
-            <th className={`${th} text-left`}>Dataset</th>
+            <th className={thFirst}>Dataset</th>
             <th className={`${th} hidden sm:table-cell`}>N</th>
             <th className={th}>Esc%</th>
             <th className={`${th} hidden md:table-cell`}>Drafter</th>
@@ -142,7 +145,7 @@ export default function BenchmarkTable() {
         <tbody>
           {rows.map((r) => (
             <tr key={r.name}>
-              <td className={`${td} text-left`}>
+              <td className={tdFirst}>
                 <span className="text-(--color-text)">{r.name}</span>
                 <span className="ml-2 text-[10px] text-(--color-text-dark)">
                   {r.labels}
