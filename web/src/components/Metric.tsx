@@ -2,13 +2,16 @@ type MetricProps = {
   value: string;
   label: string;
   sublabel?: string;
-  accent?: "orange" | "cyan" | "green" | "default";
+  accent?: "orange" | "cyan" | "green" | "red" | "amber" | "default";
+  size?: "lg" | "sm";
 };
 
 const borderColors = {
   orange: "border-l-[var(--color-orange)]",
   cyan: "border-l-[var(--color-cyan)]",
   green: "border-l-[var(--color-green)]",
+  red: "border-l-[var(--color-red)]",
+  amber: "border-l-[var(--color-amber)]",
   default: "border-l-[var(--color-border-bright)]",
 };
 
@@ -16,6 +19,8 @@ const valueColors = {
   orange: "text-[var(--color-orange)]",
   cyan: "text-[var(--color-cyan)]",
   green: "text-[var(--color-green)]",
+  red: "text-[var(--color-red)]",
+  amber: "text-[var(--color-amber)]",
   default: "text-[var(--color-text)]",
 };
 
@@ -24,6 +29,7 @@ export default function Metric({
   label,
   sublabel,
   accent = "default",
+  size = "lg",
 }: MetricProps) {
   return (
     <div
@@ -33,7 +39,7 @@ export default function Metric({
         {label}
       </div>
       <div
-        className={`mt-1.5 font-mono text-2xl font-medium tracking-tight sm:text-3xl ${valueColors[accent]}`}
+        className={`mt-1.5 font-mono font-medium tracking-tight ${size === "lg" ? "text-2xl sm:text-3xl" : "text-lg sm:text-2xl"} ${valueColors[accent]}`}
       >
         {value}
       </div>
