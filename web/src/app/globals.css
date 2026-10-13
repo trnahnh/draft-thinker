@@ -6,9 +6,10 @@
 }
 
 /*
-  Theme tokens. Dark is the default and needs no attribute; the toggle
-  sets data-theme="light" on <html>, and a pre-hydration script in
-  layout.tsx restores the saved choice before first paint. Components
+  Theme tokens. A pre-hydration script in layout.tsx sets data-theme on
+  <html> before first paint: the saved choice if there is one, otherwise
+  the OS preference, otherwise dark. The toggle updates the attribute and
+  saves the choice. Components
   reference these through text-(--color-x), bg-(--color-x) and inline
   var(--color-x), so nothing else knows which theme is active.
 */

@@ -19,12 +19,36 @@ function current(): Theme {
 
 export default function ThemeToggle() {
   useEffect(() => {
+    const media = window.matchMedia("(prefers-color-scheme: light)");
+
+    function saved(): Theme | null {
+      try {
+        const t = localStorage.getItem(STORAGE_KEY);
+        return t === "light" || t === "dark" ? t : null;
+      } catch {
+        return null;
+      }
+    }
+
     function onStorage(e: StorageEvent) {
       if (e.key !== STORAGE_KEY) return;
-      apply(e.newValue === "light" ? "light" : "dark");
+      if (e.newValue === "light" || e.newValue === "dark") {
+        apply(e.newValue);
+      } else {
+        apply(media.matches ? "light" : "dark");
+      }
     }
+
+    function onMedia(e: MediaQueryListEvent) {
+      if (saved() === null) apply(e.matches ? "light" : "dark");
+    }
+
     window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
+    media.addEventListener("change", onMedia);
+    return () => {
+      window.removeEventListener("storage", onStorage);
+      media.removeEventListener("change", onMedia);
+    };
   }, []);
 
   function toggle() {
